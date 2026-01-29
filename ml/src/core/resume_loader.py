@@ -25,7 +25,7 @@ class ResumeLoader:
             for page in reader.pages:
                 text += page.extract_text() + "\n"
             text = " ".join(text.split())
-            return text[:3000]
+            return text[:10000]
         except Exception as e:
             print(f"[ResumeLoader] Error reading PDF: {e}")
             return None

@@ -1,6 +1,6 @@
 import json
 import logging
-from beaverAI.ml.config import settings
+from config import settings
 from llama_cpp import Llama
 
 logger = logging.getLogger("Evaluator")
@@ -14,7 +14,7 @@ class Evaluator:
         logger.info("Generating Final Evaluation Report...")
         
         
-        if len(history) < 4:
+        if len(history) < 1:
             return {
                 "score": 0,
                 "mistakes": ["Interview was terminated too early."],

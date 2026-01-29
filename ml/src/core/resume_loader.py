@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 from pypdf import PdfReader
-from beaverAI.ml.config import settings
+from config import settings
 
 class ResumeLoader:
     def __init__(self):

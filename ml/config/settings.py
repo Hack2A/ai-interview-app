@@ -11,7 +11,7 @@ LLM_MODEL_NAME = "Meta-Llama-3-8B-Instruct-Q4_K_M.gguf"
 LLM_MODEL_PATH = MODELS_DIR / "llm" / LLM_MODEL_NAME
 
 CONTEXT_SIZE = 4096
-N_THREADS = 4
+N_THREADS = 8
 N_GPU_LAYERS = -1
 
 
@@ -21,3 +21,21 @@ STT_DEVICE = "cpu"
 
 TTS_MODEL_NAME = "en_US-ryan-medium.onnx"
 TTS_MODEL_PATH = MODELS_DIR / "tts" / "en" / "en_US" / "ryan" / "medium" / TTS_MODEL_NAME
+
+ENABLE_RAG = True
+ENABLE_PROCTORING = True
+ENABLE_SENTIMENT = True
+ENABLE_ATS = True
+
+JD_DIR = BASE_DIR / "data" / "job_descriptions"
+CHROMADB_DIR = MODELS_DIR / "chromadb"
+EMOTION_MODEL_NAME = "ehcalabres/wav2vec2-lg-xlsr-en-speech-emotion-recognition"
+
+PROCTORING_FPS = 5
+VIOLATION_THRESHOLD_SECONDS = 2  
+
+FILLER_WORDS = ["umm", "uh", "like", "you know", "so", "basically", "actually"]
+
+USE_ADVANCED_TTS = False
+DEFAULT_INTERVIEW_LANGUAGE = "en"
+VOICE_CLONE_SAMPLE = MODELS_DIR / "voice_samples" / "interviewer.wav"

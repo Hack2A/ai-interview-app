@@ -1,4 +1,4 @@
-from beaverAI.ml.src.core.interview_manager import InterviewManager
+from src.core.interview_manager import InterviewManager
 
 def main():
     print(" Booting up BeaverAI Core...")

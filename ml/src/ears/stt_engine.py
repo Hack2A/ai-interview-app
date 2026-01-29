@@ -1,6 +1,6 @@
 import logging
 from faster_whisper import WhisperModel
-from beaverAI.ml.config import settings
+from config import settings
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("STTEngine")
@@ -20,17 +20,19 @@ class STTEngine:
             logger.error(f"Failed to load Whisper: {e}")
             raise e
 
-    def transcribe(self, audio_path):
+    def transcribe(self, audio_path, language=None):
        
         if not audio_path:
-            return ""
+            return "", "en"
             
         segments, info = self.model.transcribe(
             audio_path, 
+            language=language,
             beam_size=5,
             vad_filter=True, 
             vad_parameters=dict(min_silence_duration_ms=500)
         )
 
         text = " ".join([segment.text for segment in segments]).strip()
-        return text
+        detected_language = info.language if hasattr(info, 'language') else "en"
+        return text, detected_language

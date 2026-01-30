@@ -6,9 +6,10 @@ from pathlib import Path
 from difflib import SequenceMatcher
 from sentence_transformers import SentenceTransformer
 import numpy as np
+import json
 
 class ATSChecker:
-    def __init__(self):
+    def __init__(self, llm_model=None):
         try:
             self.nlp = spacy.load("en_core_web_sm")
         except OSError:
@@ -17,6 +18,7 @@ class ATSChecker:
             self.nlp = spacy.load("en_core_web_sm")
         
         self.semantic_model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
+        self.llm_model = llm_model
         
         self.tech_skills = {
             "python", "java", "javascript", "typescript", "c++", "c#", "ruby", "go", "rust", "swift",
@@ -39,6 +41,8 @@ class ATSChecker:
     def preprocess_text(self, text):
         text = text.lower()
         text = re.sub(r'[^\w\s]', ' ', text)
+        text = re.sub(r'\s+', ' ', text)
+        text = re.sub(r'\b(and|or|the|a|an|in|on|at|for|to|of|with|by)\b', ' ', text)
         text = ' '.join(text.split())
         return text
     
@@ -90,7 +94,7 @@ class ATSChecker:
             if len(jd_word) < 3:
                 continue
             for resume_word in resume_words:
-                if SequenceMatcher(None, jd_word, resume_word).ratio() > 0.85:
+                if SequenceMatcher(None, jd_word, resume_word).ratio() > 0.80:
                     matched_count += 1
                     break
         
@@ -119,18 +123,21 @@ class ATSChecker:
             return 0.0
         
         try:
-            resume_sentences = [s.strip() for s in resume_text.split('.') if s.strip()]
-            jd_sentences = [s.strip() for s in jd_text.split('.') if s.strip()]
+            resume_sentences = [s.strip() for s in re.split(r'[.!?\n]', resume_text) if s.strip() and len(s.strip()) > 10]
+            jd_sentences = [s.strip() for s in re.split(r'[.!?\n]', jd_text) if s.strip() and len(s.strip()) > 10]
             
             if not resume_sentences or not jd_sentences:
                 return 0.0
             
-            resume_embeddings = self.semantic_model.encode(resume_sentences[:50])
-            jd_embeddings = self.semantic_model.encode(jd_sentences[:50])
+            resume_embeddings = self.semantic_model.encode(resume_sentences[:100])
+            jd_embeddings = self.semantic_model.encode(jd_sentences[:100])
             
             similarities = cosine_similarity(resume_embeddings, jd_embeddings)
-            max_similarities = similarities.max(axis=0)
-            avg_similarity = max_similarities.mean()
+            
+            resume_to_jd = similarities.max(axis=1).mean()
+            jd_to_resume = similarities.max(axis=0).mean()
+            
+            avg_similarity = (resume_to_jd + jd_to_resume) / 2
             
             return round(avg_similarity * 100, 2)
         except:
@@ -152,12 +159,76 @@ class ATSChecker:
         
         for jd_kw in jd_keywords - matched:
             for resume_kw in resume_keywords:
-                if SequenceMatcher(None, jd_kw, resume_kw).ratio() > 0.8:
+                if SequenceMatcher(None, jd_kw, resume_kw).ratio() > 0.75:
                     fuzzy_matched += 1
                     break
         
         total_matched = len(matched) + fuzzy_matched
         return (total_matched / len(jd_keywords)) * 100
+    
+    def llm_intelligent_score(self, resume_text, jd_text):
+        if not self.llm_model or not resume_text or not jd_text:
+            return None
+        
+        try:
+            prompt = f"""You are an expert ATS (Applicant Tracking System) and recruitment specialist. Analyze how well this resume matches the job description.
+
+JOB DESCRIPTION:
+{jd_text[:2000]}
+
+RESUME:
+{resume_text[:2000]}
+
+Provide a detailed analysis in JSON format with:
+1. match_score: A score from 0-100 indicating overall match quality
+2. strengths: List of 3-5 key strengths where the candidate matches well
+3. gaps: List of 3-5 areas where the candidate could improve or is missing requirements
+4. reasoning: Brief explanation of the score
+
+Respond ONLY with valid JSON, no other text."""
+
+            print("\n[LLM Analysis] Generating intelligent score...")
+            
+            response = self.llm_model.create_completion(
+                prompt=prompt,
+                max_tokens=800,
+                temperature=0.3,
+                stop=["</s>", "USER:", "ASSISTANT:"]
+            )
+            
+            response_text = response['choices'][0]['text'].strip()
+            
+            json_match = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', response_text, re.DOTALL)
+            if json_match:
+                json_str = json_match.group()
+                try:
+                    result = json.loads(json_str)
+                    return {
+                        "llm_score": float(result.get("match_score", 0)),
+                        "strengths": result.get("strengths", []),
+                        "gaps": result.get("gaps", []),
+                        "reasoning": result.get("reasoning", "")
+                    }
+                except json.JSONDecodeError as je:
+                    print(f"[LLM Score] JSON decode error: {je}")
+                    decoder = json.JSONDecoder()
+                    try:
+                        result, _ = decoder.raw_decode(json_str)
+                        return {
+                            "llm_score": float(result.get("match_score", 0)),
+                            "strengths": result.get("strengths", []),
+                            "gaps": result.get("gaps", []),
+                            "reasoning": result.get("reasoning", "")
+                        }
+                    except:
+                        pass
+        except Exception as e:
+            print(f"[LLM Score] Error: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+        
+        return None
     
     def gap_analysis(self, resume_keywords, jd_keywords, resume_skills, jd_skills):
         missing_keywords = jd_keywords - resume_keywords
@@ -171,10 +242,10 @@ class ATSChecker:
             top_missing_skills = sorted(list(missing_skills))[:5]
             suggestions.append(f"Consider adding these skills: {', '.join(top_missing_skills)}")
         
-        if len(matched_skills) < len(jd_skills) * 0.7:
-            suggestions.append("Resume match is low. Highlight relevant experience more prominently.")
+        if len(matched_skills) < len(jd_skills) * 0.5:
+            suggestions.append("Resume match could be improved. Highlight relevant experience more prominently.")
         
-        if len(matched_keywords) < len(jd_keywords) * 0.3:
+        if len(matched_keywords) < len(jd_keywords) * 0.2:
             suggestions.append("Add more keywords from the job description to your resume.")
         
         return {
@@ -198,16 +269,18 @@ class ATSChecker:
         fuzzy_score = self.fuzzy_match_score(resume_text, jd_text)
         
         final_score = (
-            tfidf_score * 0.25 +
-            semantic_score * 0.35 +
+            tfidf_score * 0.20 +
+            semantic_score * 0.45 +
             skill_match_score * 0.20 +
-            keyword_match_score * 0.15 +
+            keyword_match_score * 0.10 +
             fuzzy_score * 0.05
         )
         
         gap_info = self.gap_analysis(resume_keywords, jd_keywords, resume_skills, jd_skills)
         
-        return {
+        llm_analysis = self.llm_intelligent_score(resume_text, jd_text)
+        
+        result = {
             "match_score": round(final_score, 2),
             "tfidf_score": tfidf_score,
             "semantic_score": semantic_score,
@@ -217,3 +290,11 @@ class ATSChecker:
             "matched_skills": gap_info["matched_skills"],
             "suggestions": gap_info["suggestions"]
         }
+        
+        if llm_analysis:
+            result["llm_score"] = llm_analysis["llm_score"]
+            result["llm_strengths"] = llm_analysis["strengths"]
+            result["llm_gaps"] = llm_analysis["gaps"]
+            result["llm_reasoning"] = llm_analysis["reasoning"]
+        
+        return result

@@ -40,9 +40,8 @@ class InterviewManager:
         if settings.ENABLE_RAG and jd_text:
             self.rag_engine = RAGEngine(jd_text=jd_text)
         
-        self.ats_checker = ATSChecker() if settings.ENABLE_ATS else None
-        
         self.brain = LLMEngine(resume_text=resume_text, rag_engine=self.rag_engine)
+        self.ats_checker = ATSChecker(llm_model=self.brain.llm) if settings.ENABLE_ATS else None
         self.ears = STTEngine()
         self.recorder = VoiceRecorder()
         
@@ -75,7 +74,22 @@ class InterviewManager:
         
         ats_report = self.ats_checker.analyze(resume_text, jd_text)
         
-        print(f"\nMatch Score: {ats_report['match_score']}%")
+        print(f"\nTraditional ATS Score: {ats_report['match_score']}%")
+        
+        if 'llm_score' in ats_report:
+            print(f"AI Intelligent Score: {ats_report['llm_score']}%")
+            print(f"\nAI Analysis: {ats_report.get('llm_reasoning', 'N/A')}")
+            
+            if ats_report.get('llm_strengths'):
+                print("\nKey Strengths (AI Analysis):")
+                for strength in ats_report['llm_strengths'][:5]:
+                    print(f"  + {strength}")
+            
+            if ats_report.get('llm_gaps'):
+                print("\nAreas for Improvement (AI Analysis):")
+                for gap in ats_report['llm_gaps'][:5]:
+                    print(f"  - {gap}")
+        
         print(f"\nMatched Skills ({len(ats_report['matched_skills'])}): {', '.join(ats_report['matched_skills'][:10])}")
         if ats_report['missing_skills']:
             print(f"\nMissing Skills ({len(ats_report['missing_skills'])}): {', '.join(ats_report['missing_skills'][:10])}")

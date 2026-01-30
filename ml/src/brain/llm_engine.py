@@ -74,5 +74,9 @@ class LLMEngine:
         
         self.history.append({"role": "assistant", "content": full_response})
     
+    @property
+    def llm(self):
+        return self.model
+    
     def get_history(self):
         return self.history

@@ -4,6 +4,7 @@ from pathlib import Path
 from functools import lru_cache
 from typing import Any, Optional
 import time
+import threading
 
 class CacheManager:
     def __init__(self, cache_dir: str = "data/cache"):
@@ -12,6 +13,7 @@ class CacheManager:
         self.embedding_cache = {}
         self.llm_cache = {}
         self.cache_ttl = 86400
+        self._lock = threading.RLock()
     
     def _hash_content(self, content: str) -> str:
         return hashlib.md5(content.encode('utf-8')).hexdigest()
@@ -19,8 +21,13 @@ class CacheManager:
     def get_embedding_cache(self, text: str) -> Optional[Any]:
         cache_key = self._hash_content(text)
         
-        if cache_key in self.embedding_cache:
-            return self.embedding_cache[cache_key]
+        with self._lock:
+            if cache_key in self.embedding_cache:
+                cached_data = self.embedding_cache[cache_key]
+                if time.time() - cached_data['timestamp'] < self.cache_ttl:
+                    return cached_data['embedding']
+                else:
+                    del self.embedding_cache[cache_key]
         
         cache_file = self.cache_dir / f"emb_{cache_key}.json"
         if cache_file.exists():
@@ -30,9 +37,13 @@ class CacheManager:
                     if time.time() - data['timestamp'] < self.cache_ttl:
                         import numpy as np
                         embedding = np.array(data['embedding'])
-                        self.embedding_cache[cache_key] = embedding
+                        with self._lock:
+                            self.embedding_cache[cache_key] = {
+                                'embedding': embedding,
+                                'timestamp': data['timestamp']
+                            }
                         return embedding
-            except:
+            except (json.JSONDecodeError, KeyError, FileNotFoundError, OSError) as e:
                 pass
         return None
     
@@ -44,7 +55,11 @@ class CacheManager:
         else:
             embedding_list = embedding
         
-        self.embedding_cache[cache_key] = embedding if isinstance(embedding, np.ndarray) else np.array(embedding)
+        with self._lock:
+            self.embedding_cache[cache_key] = {
+                'embedding': embedding if isinstance(embedding, np.ndarray) else np.array(embedding),
+                'timestamp': time.time()
+            }
         
         cache_file = self.cache_dir / f"emb_{cache_key}.json"
         try:
@@ -53,16 +68,21 @@ class CacheManager:
                     'embedding': embedding_list,
                     'timestamp': time.time()
                 }, f)
-        except:
+        except (OSError, IOError) as e:
             pass
     
     def get_llm_cache(self, resume_text: str, jd_text: str) -> Optional[dict]:
-        cache_key = self._hash_content(resume_text + jd_text)
+        h1 = self._hash_content(resume_text)
+        h2 = self._hash_content(jd_text)
+        cache_key = self._hash_content(f"{h1}:{h2}")
         
-        if cache_key in self.llm_cache:
-            cached_data = self.llm_cache[cache_key]
-            if time.time() - cached_data['timestamp'] < self.cache_ttl:
-                return cached_data['result']
+        with self._lock:
+            if cache_key in self.llm_cache:
+                cached_data = self.llm_cache[cache_key]
+                if time.time() - cached_data['timestamp'] < self.cache_ttl:
+                    return cached_data['result']
+                else:
+                    del self.llm_cache[cache_key]
         
         cache_file = self.cache_dir / f"llm_{cache_key}.json"
         if cache_file.exists():
@@ -70,40 +90,50 @@ class CacheManager:
                 with open(cache_file, 'r') as f:
                     data = json.load(f)
                     if time.time() - data['timestamp'] < self.cache_ttl:
-                        self.llm_cache[cache_key] = data
+                        with self._lock:
+                            self.llm_cache[cache_key] = data
                         return data['result']
-            except:
+            except (json.JSONDecodeError, KeyError, FileNotFoundError, OSError) as e:
                 pass
         return None
     
     def set_llm_cache(self, resume_text: str, jd_text: str, result: dict):
-        cache_key = self._hash_content(resume_text + jd_text)
+        h1 = self._hash_content(resume_text)
+        h2 = self._hash_content(jd_text)
+        cache_key = self._hash_content(f"{h1}:{h2}")
+        
         cache_data = {
             'result': result,
             'timestamp': time.time()
         }
-        self.llm_cache[cache_key] = cache_data
+        
+        with self._lock:
+            self.llm_cache[cache_key] = cache_data
         
         cache_file = self.cache_dir / f"llm_{cache_key}.json"
         try:
             with open(cache_file, 'w') as f:
                 json.dump(cache_data, f)
-        except:
+        except (OSError, IOError) as e:
             pass
     
     def clear_cache(self):
-        self.embedding_cache.clear()
-        self.llm_cache.clear()
+        with self._lock:
+            self.embedding_cache.clear()
+            self.llm_cache.clear()
         for cache_file in self.cache_dir.glob("*.json"):
             try:
                 cache_file.unlink()
-            except:
+            except (OSError, PermissionError) as e:
                 pass
 
 _global_cache = None
+_cache_lock = threading.Lock()
 
 def get_cache_manager() -> CacheManager:
     global _global_cache
     if _global_cache is None:
-        _global_cache = CacheManager()
+        with _cache_lock:
+            if _global_cache is None:
+                _global_cache = CacheManager()
     return _global_cache

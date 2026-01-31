@@ -31,14 +31,11 @@ class JDLoader:
             print(f"[JDLoader] Error reading file: {e}")
             return None
     
-    def _load_pdf(self, file_path):
+    def _validate_file_path(self, file_path, expected_dir):
         MAX_FILE_SIZE = 10 * 1024 * 1024
         
         if not file_path.is_file():
             raise ValueError("Invalid file path")
-        
-        if not file_path.suffix.lower() == '.pdf':
-            raise ValueError("File must be PDF")
         
         file_size = file_path.stat().st_size
         if file_size > MAX_FILE_SIZE:
@@ -49,19 +46,34 @@ class JDLoader:
         
         try:
             file_path_resolved = file_path.resolve()
-            if not str(file_path_resolved).startswith(str(self.jd_dir.resolve())):
+            if not str(file_path_resolved).startswith(str(expected_dir.resolve())):
                 raise ValueError("Path traversal detected")
-        except:
-            raise ValueError("Invalid file path")
+        except (FileNotFoundError, OSError) as e:
+            raise ValueError("Invalid file path") from e
+        
+        return file_path_resolved
+    
+    def _load_pdf(self, file_path):
+        if not file_path.suffix.lower() == '.pdf':
+            raise ValueError("File must be PDF")
+        
+        validated_path = self._validate_file_path(file_path, self.jd_dir)
         
         text = ""
-        reader = PdfReader(file_path)
+        reader = PdfReader(validated_path)
         for page in reader.pages:
-            text += page.extract_text() + "\n"
+            page_text = page.extract_text()
+            if page_text:
+                text += page_text + "\n"
         return " ".join(text.split())
     
     def _load_txt(self, file_path):
-        with open(file_path, 'r', encoding='utf-8') as f:
+        if not file_path.suffix.lower() == '.txt':
+            raise ValueError("File must be TXT")
+        
+        validated_path = self._validate_file_path(file_path, self.jd_dir)
+        
+        with open(validated_path, 'r', encoding='utf-8') as f:
             text = f.read()
         return " ".join(text.split())
     

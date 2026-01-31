@@ -44,13 +44,15 @@ class ResumeLoader:
             file_path_resolved = file_path.resolve()
             if not str(file_path_resolved).startswith(str(self.resume_dir.resolve())):
                 raise ValueError("Path traversal detected")
-        except:
-            raise ValueError("Invalid file path")
+        except (FileNotFoundError, OSError) as e:
+            raise ValueError("Invalid file path") from e
         
         text = ""
         reader = PdfReader(file_path)
         for page in reader.pages:
-            text += page.extract_text() + "\n"
+            page_text = page.extract_text()
+            if page_text:
+                text += page_text + "\n"
             if len(text) > 50000:
                 break
         return " ".join(text.split())[:10000]

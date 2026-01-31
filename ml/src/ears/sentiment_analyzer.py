@@ -5,11 +5,14 @@ import librosa
 import numpy as np
 from config import settings
 import logging
+import re
 
 logger = logging.getLogger("SentimentAnalyzer")
 
 class SentimentAnalyzer:
     def __init__(self):
+        self.feature_extractor = None
+        self.model = None
         try:
             logger.info("Loading emotion recognition model...")
             self.feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(
@@ -22,6 +25,7 @@ class SentimentAnalyzer:
             logger.info("Emotion model loaded successfully")
         except Exception as e:
             logger.error(f"Failed to load emotion model: {e}")
+            self.feature_extractor = None
             self.model = None
     
     def analyze_emotion(self, audio_path):
@@ -32,7 +36,6 @@ class SentimentAnalyzer:
             import soundfile as sf
             
             waveform, sample_rate = sf.read(audio_path, dtype='float32')
-            
             
             duration = len(waveform) / sample_rate
             if duration < 1.0:
@@ -46,7 +49,6 @@ class SentimentAnalyzer:
                 import librosa
                 waveform = librosa.resample(waveform, orig_sr=sample_rate, target_sr=16000)
             
-            # Ensure audio has sufficient energy
             energy = np.sqrt(np.mean(waveform ** 2))
             if energy < 0.001:
                 logger.warning(f"Audio has very low energy ({energy:.6f}), likely silence")
@@ -63,9 +65,8 @@ class SentimentAnalyzer:
                 logits = self.model(**inputs).logits
                 probs = torch.nn.functional.softmax(logits, dim=-1)[0]
             
-            # Validate that model is producing meaningful predictions
             max_prob = float(probs.max())
-            if max_prob < 0.2:  # All probabilities roughly equal means model isn't working
+            if max_prob < 0.2:
                 logger.warning(f"Model predictions seem random (max prob: {max_prob:.3f})")
                 return {"neutral": 1.0}
             
@@ -119,7 +120,9 @@ class SentimentAnalyzer:
         total_fillers = 0
         
         for filler in settings.FILLER_WORDS:
-            count = text_lower.count(filler)
+            pattern = r'\b' + re.escape(filler) + r'\b'
+            matches = re.findall(pattern, text_lower)
+            count = len(matches)
             if count > 0:
                 filler_count[filler] = count
                 total_fillers += count

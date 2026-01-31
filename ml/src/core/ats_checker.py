@@ -16,10 +16,11 @@ class ATSChecker:
     def __init__(self, llm_model=None):
         try:
             self.nlp = spacy.load("en_core_web_sm")
-        except OSError:
-            import subprocess
-            subprocess.run(["python", "-m", "spacy", "download", "en_core_web_sm"], check=True)
-            self.nlp = spacy.load("en_core_web_sm")
+        except OSError as e:
+            raise RuntimeError(
+                "spaCy model 'en_core_web_sm' not found. "
+                "Please install it before deployment using: python -m spacy download en_core_web_sm"
+            ) from e
         
         device = "cuda" if torch.cuda.is_available() else "cpu"
         self.semantic_model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2', device=device)

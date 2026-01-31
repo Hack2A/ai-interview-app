@@ -9,7 +9,6 @@ class STTEngine:
     def __init__(self):
         logger.info(f"Loading Whisper model: {settings.STT_MODEL_SIZE}...")
         try:
-            
             self.model = WhisperModel(
                 settings.STT_MODEL_SIZE, 
                 device=settings.STT_DEVICE, 
@@ -46,16 +45,20 @@ class STTEngine:
         if file_size == 0:
             logger.warning("Audio file is empty")
             return "", "en"
-            
-        segments, info = self.model.transcribe(
-            str(audio_file), 
-            language=language,
-            beam_size=5,
-            vad_filter=True, 
-            vad_parameters=dict(min_silence_duration_ms=500)
-        )
+        
+        try:
+            segments, info = self.model.transcribe(
+                str(audio_file), 
+                language=language,
+                beam_size=5,
+                vad_filter=True, 
+                vad_parameters=dict(min_silence_duration_ms=500)
+            )
 
-        text = " ".join([segment.text for segment in segments]).strip()
-        text = text[:5000]
-        detected_language = info.language if hasattr(info, 'language') else "en"
-        return text, detected_language
+            text = " ".join([segment.text for segment in segments]).strip()
+            text = text[:5000]
+            detected_language = info.language if hasattr(info, 'language') else "en"
+            return text, detected_language
+        except Exception as e:
+            logger.exception(f"Transcription failed for {audio_path}: {e}")
+            return "", "en"

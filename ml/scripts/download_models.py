@@ -1,4 +1,4 @@
-import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -7,7 +7,11 @@ print("     BEAVERAI - MODEL DOWNLOADER")
 print("="*60)
 
 print("\n[1/4] Downloading spaCy English model...")
-os.system("python -m spacy download en_core_web_sm")
+try:
+    subprocess.run(["python", "-m", "spacy", "download", "en_core_web_sm"], check=True)
+except subprocess.CalledProcessError as e:
+    print(f"✗ Failed to download spaCy model: {e}")
+    sys.exit(1)
 
 print("\n[2/4] Downloading sentence-transformers model...")
 try:

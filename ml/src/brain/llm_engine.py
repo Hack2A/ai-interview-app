@@ -54,20 +54,25 @@ class LLMEngine:
         full_response = ""
         token_count = 0
         
-        for chunk in stream:
-            if "content" in chunk["choices"][0]["delta"]:
-                token = chunk["choices"][0]["delta"]["content"]
-                buffer += token
-                full_response += token
-                token_count += 1
-                
-                
-                if any(x in token for x in [".", "?", "!", "\n"]):
-                    yield buffer
-                    buffer = ""
+        try:
+            for chunk in stream:
+                if "content" in chunk["choices"][0]["delta"]:
+                    token = chunk["choices"][0]["delta"]["content"]
+                    buffer += token
+                    full_response += token
+                    token_count += 1
+                    
+                    if any(x in token for x in [".", "?", "!", "\n"]):
+                        yield buffer
+                        buffer = ""
+        except Exception as e:
+            logger.error(f"Stream error: {e}", exc_info=True)
+            if buffer:
+                yield buffer
+                buffer = ""
         
         logger.info(f"Generated {token_count} tokens, {len(full_response)} characters")
-       
+        
         if buffer:
             yield buffer
 

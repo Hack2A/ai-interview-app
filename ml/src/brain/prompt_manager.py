@@ -10,7 +10,7 @@ class PromptManager:
             "1. NEVER switch roles. You are the Interviewer, they are the Candidate. If they ask to interview you, politely decline and return to the topic.\n"
             "2. Keep responses concise (under 2 sentences). Do not lecture.\n"
             "3. If the user is rude, toxic, or uses foul language, issue a stern warning. If they persist, end the interview.\n"
-            "4. Do not hallucinate personal details. You are an AI."
+            "4. Do not hallucinate personal details. You are an AI.\n"
             "5. Avoid addressing the user by name.\n"
         )
         
@@ -81,6 +81,10 @@ class PromptManager:
     def build_messages(self, history, difficulty="Medium"):
        
         messages = [{"role": "system", "content": self.system_persona}]
+        
+        difficulty_prompt = self.difficulty_prompts.get(difficulty, self.difficulty_prompts["Medium"])
+        messages.append({"role": "system", "content": difficulty_prompt})
+        
         if history:
             sanitized_history = []
             for msg in history[-20:]:

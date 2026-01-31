@@ -103,7 +103,7 @@ class ATSChecker:
             tfidf_matrix = vectorizer.fit_transform([resume_text, jd_text])
             similarity = cosine_similarity(tfidf_matrix[0:1], tfidf_matrix[1:2])[0][0]
             return round(similarity * 100, 2)
-        except:
+        except (ValueError, ZeroDivisionError) as e:
             return 0.0
     
     def calculate_semantic_similarity(self, resume_text, jd_text):
@@ -227,8 +227,10 @@ Respond ONLY with valid JSON, no other text."""
                         }
                         self.cache.set_llm_cache(resume_text, jd_text, llm_result)
                         return llm_result
-                    except:
-                        pass
+                    except json.JSONDecodeError as e:
+                        print(f"[LLM Score] JSON decode error: {e}")
+                    except Exception as e:
+                        print(f"[LLM Score] Parsing error: {e}")
         except Exception as e:
             print(f"[LLM Score] Error: {e}")
             import traceback

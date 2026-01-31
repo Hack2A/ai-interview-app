@@ -19,7 +19,13 @@ class Evaluator:
                 "score": 0,
                 "mistakes": ["Interview was terminated too early."],
                 "suggestions": ["Please complete a full session for analysis."],
-                "domain_rating": {"status": "Insufficient Data"}
+                "domain_rating": {"status": "Insufficient Data"},
+                "swot_analysis": {
+                    "strengths": ["Insufficient data"],
+                    "weaknesses": ["Interview incomplete"],
+                    "opportunities": ["Complete full interview for detailed analysis"],
+                    "threats": ["Unable to assess"]
+                }
             }
 
         llm = Llama(
@@ -42,13 +48,19 @@ class Evaluator:
             '  "score": (int 0-100, be harsh),\n'
             '  "mistakes": [list of specific errors],\n'
             '  "suggestions": [list of actionable advice],\n'
-            '  "domain_rating": {"hr": int, "technical": int, "communication": int}\n'
+            '  "domain_rating": {"hr": int, "technical": int, "communication": int},\n'
+            '  "swot_analysis": {\n'
+            '    "strengths": [list of 3-5 key strengths],\n'
+            '    "weaknesses": [list of 3-5 weaknesses],\n'
+            '    "opportunities": [list of 3-5 growth opportunities],\n'
+            '    "threats": [list of 3-5 potential concerns]\n'
+            '  }\n'
             "}"
         )
 
         output = llm.create_chat_completion(
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=600,
+            max_tokens=800,
             temperature=0.1,
             response_format={"type": "json_object"}
         )

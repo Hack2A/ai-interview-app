@@ -3,6 +3,7 @@ import json
 import numpy as np
 import soundfile as sf
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
 from src.brain.llm_engine import LLMEngine
 from src.ears.stt_engine import STTEngine
 from src.ears.vad import VoiceRecorder
@@ -14,7 +15,6 @@ from src.core.resume_loader import ResumeLoader
 from src.core.jd_loader import JDLoader
 from src.brain.rag_engine import RAGEngine
 from src.core.ats_checker import ATSChecker
-from src.ears.sentiment_analyzer import SentimentAnalyzer
 
 if settings.ENABLE_PROCTORING:
     from src.eyes.proctoring_monitor import ProctoringMonitor
@@ -36,14 +36,24 @@ class InterviewManager:
         self.jd_loader = JDLoader() if settings.ENABLE_RAG else None
         jd_text = self.jd_loader.load_jd() if self.jd_loader else None
         
-        self.rag_engine = None
-        if settings.ENABLE_RAG and jd_text:
-            self.rag_engine = RAGEngine(jd_text=jd_text)
+        self._sentiment_analyzer = None
+        self._proctoring = None
+        self._ats_checker = None
         
-        self.brain = LLMEngine(resume_text=resume_text, rag_engine=self.rag_engine)
-        self.ats_checker = ATSChecker(llm_model=self.brain.llm) if settings.ENABLE_ATS else None
-        self.ears = STTEngine()
-        self.recorder = VoiceRecorder()
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            future_rag = None
+            if settings.ENABLE_RAG and jd_text:
+                future_rag = executor.submit(RAGEngine, jd_text=jd_text)
+            
+            future_brain = executor.submit(LLMEngine, resume_text=resume_text, rag_engine=None)
+            future_ears = executor.submit(STTEngine)
+            future_recorder = executor.submit(VoiceRecorder)
+            
+            self.rag_engine = future_rag.result() if future_rag else None
+            self.brain = future_brain.result()
+            self.brain.prompt_manager.rag_engine = self.rag_engine
+            self.ears = future_ears.result()
+            self.recorder = future_recorder.result()
         
         if settings.USE_ADVANCED_TTS:
             try:
@@ -56,12 +66,29 @@ class InterviewManager:
             self.voice_engine = TTSEngine(vad_module=self.recorder)
         
         self.evaluator = Evaluator(settings.LLM_MODEL_PATH)
-        self.sentiment_analyzer = SentimentAnalyzer() if settings.ENABLE_SENTIMENT else None
-        self.proctoring = ProctoringMonitor() if settings.ENABLE_PROCTORING else None
         
         self.next_turn_audio = None
         self.audio_responses = []
         self.detected_language = settings.DEFAULT_INTERVIEW_LANGUAGE
+    
+    @property
+    def sentiment_analyzer(self):
+        if self._sentiment_analyzer is None and settings.ENABLE_SENTIMENT:
+            from src.ears.sentiment_analyzer import SentimentAnalyzer
+            self._sentiment_analyzer = SentimentAnalyzer()
+        return self._sentiment_analyzer
+    
+    @property
+    def proctoring(self):
+        if self._proctoring is None and settings.ENABLE_PROCTORING:
+            self._proctoring = ProctoringMonitor()
+        return self._proctoring
+    
+    @property
+    def ats_checker(self):
+        if self._ats_checker is None and settings.ENABLE_ATS:
+            self._ats_checker = ATSChecker(llm_model=self.brain.llm)
+        return self._ats_checker
 
     def _run_ats_check(self, resume_text, jd_text):
         if not self.ats_checker or not resume_text or not jd_text:

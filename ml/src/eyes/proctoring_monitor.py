@@ -2,6 +2,7 @@ import cv2
 import threading
 import time
 import logging
+import numpy as np
 from src.eyes.proctoring_engine import ProctoringEngine
 from config import settings
 
@@ -50,6 +51,11 @@ class ProctoringMonitor:
         cv2.namedWindow("BeaverAI Proctoring", cv2.WINDOW_NORMAL)
         cv2.resizeWindow("BeaverAI Proctoring", 640, 480)
         
+        frame_count = 0
+        skip_frames = 2
+        prev_frame = None
+        motion_threshold = 5000
+        
         while self.is_running:
             try:
                 ret, frame = self.cap.read()
@@ -57,7 +63,25 @@ class ProctoringMonitor:
                     time.sleep(frame_interval)
                     continue
                 
-                violations, metadata = self.engine.analyze_frame(frame)
+                frame_count += 1
+                
+                should_analyze = frame_count % (skip_frames + 1) == 0
+                
+                if prev_frame is not None and frame_count % 5 == 0:
+                    gray_current = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                    gray_prev = cv2.cvtColor(prev_frame, cv2.COLOR_BGR2GRAY)
+                    frame_diff = cv2.absdiff(gray_current, gray_prev)
+                    motion_score = np.sum(frame_diff)
+                    
+                    if motion_score < motion_threshold:
+                        should_analyze = False
+                
+                violations = []
+                metadata = {}
+                
+                if should_analyze:
+                    violations, metadata = self.engine.analyze_frame(frame)
+                    prev_frame = frame.copy()
                 
                 display_frame = frame.copy()
                 
@@ -84,7 +108,6 @@ class ProctoringMonitor:
                 
                 current_time = time.time()
                 
-               
                 for violation_type in violations:
                     
                     if violation_type not in self.continuous_violation_tracker:
@@ -99,7 +122,6 @@ class ProctoringMonitor:
                             
                             self._log_violation(violation_type, duration, is_sustained=True)
                             self.continuous_violation_tracker[violation_type] = current_time
-                
                 
                 active_violations = set(violations)
                 for vtype in list(self.continuous_violation_tracker.keys()):

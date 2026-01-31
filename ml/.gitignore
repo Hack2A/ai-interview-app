@@ -34,7 +34,7 @@ __pycache__/
 **/data/temp/*
 
 **/data/transcripts/*
-
+**/data/cache/*
 **/models/llm/*
 **/models/tts/*
 *.gguf

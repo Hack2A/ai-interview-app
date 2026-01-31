@@ -7,6 +7,10 @@ from difflib import SequenceMatcher
 from sentence_transformers import SentenceTransformer
 import numpy as np
 import json
+from functools import lru_cache
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import torch
+from src.core.cache_manager import get_cache_manager
 
 class ATSChecker:
     def __init__(self, llm_model=None):
@@ -17,8 +21,10 @@ class ATSChecker:
             os.system("python -m spacy download en_core_web_sm")
             self.nlp = spacy.load("en_core_web_sm")
         
-        self.semantic_model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.semantic_model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2', device=device)
         self.llm_model = llm_model
+        self.cache = get_cache_manager()
         
         self.tech_skills = {
             "python", "java", "javascript", "typescript", "c++", "c#", "ruby", "go", "rust", "swift",
@@ -46,6 +52,7 @@ class ATSChecker:
         text = ' '.join(text.split())
         return text
     
+    @lru_cache(maxsize=128)
     def extract_skills(self, text):
         if not text:
             return set()
@@ -54,66 +61,47 @@ class ATSChecker:
         found_skills = set()
         
         for skill in self.tech_skills:
-            pattern = r'\b' + re.escape(skill) + r'\b'
-            if re.search(pattern, text_lower):
+            if skill in text_lower:
                 found_skills.add(skill)
         
         return found_skills
     
+    @lru_cache(maxsize=128)
     def extract_keywords(self, text):
         if not text:
             return set()
         
-        doc = self.nlp(text.lower())
-        keywords = set()
+        processed = self.preprocess_text(text)
+        doc = self.nlp(processed)
         
-        for ent in doc.ents:
-            if ent.label_ in ["ORG", "PRODUCT", "GPE", "WORK_OF_ART", "LANGUAGE", "SKILL"]:
-                keywords.add(ent.text.strip())
+        keywords = set()
+        for token in doc:
+            if token.pos_ in ['NOUN', 'PROPN', 'ADJ'] and len(token.text) > 2:
+                keywords.add(token.text)
         
         for chunk in doc.noun_chunks:
-            chunk_text = chunk.text.strip()
-            if 2 <= len(chunk_text.split()) <= 4:
-                keywords.add(chunk_text)
-        
-        for token in doc:
-            if token.pos_ in ["NOUN", "PROPN"] and len(token.text) > 2:
-                keywords.add(token.text)
+            if len(chunk.text) > 3:
+                keywords.add(chunk.text.strip())
         
         return keywords
     
-    def fuzzy_match_score(self, resume_text, jd_text):
-        resume_words = set(self.preprocess_text(resume_text).split())
-        jd_words = set(self.preprocess_text(jd_text).split())
+    def get_cached_embedding(self, text):
+        cached = self.cache.get_embedding_cache(text)
+        if cached is not None:
+            return cached
         
-        if not jd_words:
-            return 0.0
-        
-        matched_count = 0
-        for jd_word in jd_words:
-            if len(jd_word) < 3:
-                continue
-            for resume_word in resume_words:
-                if SequenceMatcher(None, jd_word, resume_word).ratio() > 0.80:
-                    matched_count += 1
-                    break
-        
-        return (matched_count / len(jd_words)) * 100 if jd_words else 0.0
+        embedding = self.semantic_model.encode(text, convert_to_tensor=False, show_progress_bar=False)
+        self.cache.set_embedding_cache(text, embedding)
+        return embedding
     
     def calculate_tfidf_similarity(self, resume_text, jd_text):
         if not resume_text or not jd_text:
             return 0.0
         
-        vectorizer = TfidfVectorizer(
-            stop_words='english', 
-            ngram_range=(1, 3),
-            max_features=1000,
-            min_df=1
-        )
-        
+        vectorizer = TfidfVectorizer(max_features=500, ngram_range=(1, 2))
         try:
-            vectors = vectorizer.fit_transform([resume_text, jd_text])
-            similarity = cosine_similarity(vectors[0:1], vectors[1:2])[0][0]
+            tfidf_matrix = vectorizer.fit_transform([resume_text, jd_text])
+            similarity = cosine_similarity(tfidf_matrix[0:1], tfidf_matrix[1:2])[0][0]
             return round(similarity * 100, 2)
         except:
             return 0.0
@@ -122,53 +110,68 @@ class ATSChecker:
         if not resume_text or not jd_text:
             return 0.0
         
-        try:
-            resume_sentences = [s.strip() for s in re.split(r'[.!?\n]', resume_text) if s.strip() and len(s.strip()) > 10]
-            jd_sentences = [s.strip() for s in re.split(r'[.!?\n]', jd_text) if s.strip() and len(s.strip()) > 10]
-            
-            if not resume_sentences or not jd_sentences:
-                return 0.0
-            
-            resume_embeddings = self.semantic_model.encode(resume_sentences[:100])
-            jd_embeddings = self.semantic_model.encode(jd_sentences[:100])
-            
-            similarities = cosine_similarity(resume_embeddings, jd_embeddings)
-            
-            resume_to_jd = similarities.max(axis=1).mean()
-            jd_to_resume = similarities.max(axis=0).mean()
-            
-            avg_similarity = (resume_to_jd + jd_to_resume) / 2
-            
-            return round(avg_similarity * 100, 2)
-        except:
+        resume_sentences = [s.strip() for s in resume_text.split('.') if len(s.strip()) > 20]
+        jd_sentences = [s.strip() for s in jd_text.split('.') if len(s.strip()) > 20]
+        
+        if not resume_sentences or not jd_sentences:
             return 0.0
+        
+        resume_embeddings = self.semantic_model.encode(resume_sentences, 
+                                                       batch_size=32,
+                                                       convert_to_tensor=False, 
+                                                       show_progress_bar=False)
+        jd_embeddings = self.semantic_model.encode(jd_sentences,
+                                                   batch_size=32, 
+                                                   convert_to_tensor=False, 
+                                                   show_progress_bar=False)
+        
+        similarities = cosine_similarity(resume_embeddings, jd_embeddings)
+        max_similarities = np.max(similarities, axis=1)
+        avg_similarity = np.mean(max_similarities)
+        
+        return round(avg_similarity * 100, 2)
     
     def calculate_skill_match(self, resume_skills, jd_skills):
         if not jd_skills:
-            return 100.0
+            return 0.0
         
-        matched = resume_skills & jd_skills
+        matched = resume_skills.intersection(jd_skills)
         return (len(matched) / len(jd_skills)) * 100
     
     def calculate_keyword_match(self, resume_keywords, jd_keywords):
         if not jd_keywords:
-            return 100.0
+            return 0.0
         
-        matched = resume_keywords & jd_keywords
-        fuzzy_matched = 0
+        matched = resume_keywords.intersection(jd_keywords)
+        return (len(matched) / len(jd_keywords)) * 100
+    
+    def fuzzy_match_score(self, resume_text, jd_text):
+        if not resume_text or not jd_text:
+            return 0.0
         
-        for jd_kw in jd_keywords - matched:
-            for resume_kw in resume_keywords:
-                if SequenceMatcher(None, jd_kw, resume_kw).ratio() > 0.75:
-                    fuzzy_matched += 1
-                    break
+        return SequenceMatcher(None, resume_text[:1000], jd_text[:1000]).ratio() * 100
+    
+    def gap_analysis(self, resume_keywords, jd_keywords, resume_skills, jd_skills):
+        missing_skills = list(jd_skills - resume_skills)
+        matched_skills = list(resume_skills.intersection(jd_skills))
         
-        total_matched = len(matched) + fuzzy_matched
-        return (total_matched / len(jd_keywords)) * 100
+        suggestions = []
+        if missing_skills:
+            suggestions.append(f"Consider adding these skills: {', '.join(missing_skills[:5])}")
+        
+        return {
+            "missing_skills": missing_skills,
+            "matched_skills": matched_skills,
+            "suggestions": suggestions
+        }
     
     def llm_intelligent_score(self, resume_text, jd_text):
         if not self.llm_model or not resume_text or not jd_text:
             return None
+        
+        cached_result = self.cache.get_llm_cache(resume_text, jd_text)
+        if cached_result:
+            return cached_result
         
         try:
             prompt = f"""You are an expert ATS (Applicant Tracking System) and recruitment specialist. Analyze how well this resume matches the job description.
@@ -203,23 +206,27 @@ Respond ONLY with valid JSON, no other text."""
                 json_str = json_match.group()
                 try:
                     result = json.loads(json_str)
-                    return {
+                    llm_result = {
                         "llm_score": float(result.get("match_score", 0)),
                         "strengths": result.get("strengths", []),
                         "gaps": result.get("gaps", []),
                         "reasoning": result.get("reasoning", "")
                     }
+                    self.cache.set_llm_cache(resume_text, jd_text, llm_result)
+                    return llm_result
                 except json.JSONDecodeError as je:
                     print(f"[LLM Score] JSON decode error: {je}")
                     decoder = json.JSONDecoder()
                     try:
                         result, _ = decoder.raw_decode(json_str)
-                        return {
+                        llm_result = {
                             "llm_score": float(result.get("match_score", 0)),
                             "strengths": result.get("strengths", []),
                             "gaps": result.get("gaps", []),
                             "reasoning": result.get("reasoning", "")
                         }
+                        self.cache.set_llm_cache(resume_text, jd_text, llm_result)
+                        return llm_result
                     except:
                         pass
         except Exception as e:
@@ -230,43 +237,31 @@ Respond ONLY with valid JSON, no other text."""
         
         return None
     
-    def gap_analysis(self, resume_keywords, jd_keywords, resume_skills, jd_skills):
-        missing_keywords = jd_keywords - resume_keywords
-        missing_skills = jd_skills - resume_skills
-        matched_keywords = resume_keywords & jd_keywords
-        matched_skills = resume_skills & jd_skills
-        
-        suggestions = []
-        
-        if missing_skills:
-            top_missing_skills = sorted(list(missing_skills))[:5]
-            suggestions.append(f"Consider adding these skills: {', '.join(top_missing_skills)}")
-        
-        if len(matched_skills) < len(jd_skills) * 0.5:
-            suggestions.append("Resume match could be improved. Highlight relevant experience more prominently.")
-        
-        if len(matched_keywords) < len(jd_keywords) * 0.2:
-            suggestions.append("Add more keywords from the job description to your resume.")
-        
-        return {
-            "missing_keywords": sorted(list(missing_keywords))[:10],
-            "missing_skills": sorted(list(missing_skills)),
-            "matched_keywords": sorted(list(matched_keywords)),
-            "matched_skills": sorted(list(matched_skills)),
-            "suggestions": suggestions
-        }
-    
     def analyze(self, resume_text, jd_text):
-        resume_keywords = self.extract_keywords(resume_text)
-        jd_keywords = self.extract_keywords(jd_text)
-        resume_skills = self.extract_skills(resume_text)
-        jd_skills = self.extract_skills(jd_text)
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            future_keywords_resume = executor.submit(self.extract_keywords, resume_text)
+            future_keywords_jd = executor.submit(self.extract_keywords, jd_text)
+            future_skills_resume = executor.submit(self.extract_skills, resume_text)
+            future_skills_jd = executor.submit(self.extract_skills, jd_text)
+            
+            resume_keywords = future_keywords_resume.result()
+            jd_keywords = future_keywords_jd.result()
+            resume_skills = future_skills_resume.result()
+            jd_skills = future_skills_jd.result()
         
-        tfidf_score = self.calculate_tfidf_similarity(resume_text, jd_text)
-        semantic_score = self.calculate_semantic_similarity(resume_text, jd_text)
-        skill_match_score = self.calculate_skill_match(resume_skills, jd_skills)
-        keyword_match_score = self.calculate_keyword_match(resume_keywords, jd_keywords)
-        fuzzy_score = self.fuzzy_match_score(resume_text, jd_text)
+        futures = {}
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            futures['tfidf'] = executor.submit(self.calculate_tfidf_similarity, resume_text, jd_text)
+            futures['semantic'] = executor.submit(self.calculate_semantic_similarity, resume_text, jd_text)
+            futures['skill'] = executor.submit(self.calculate_skill_match, resume_skills, jd_skills)
+            futures['keyword'] = executor.submit(self.calculate_keyword_match, resume_keywords, jd_keywords)
+            futures['fuzzy'] = executor.submit(self.fuzzy_match_score, resume_text, jd_text)
+            
+            tfidf_score = futures['tfidf'].result()
+            semantic_score = futures['semantic'].result()
+            skill_match_score = futures['skill'].result()
+            keyword_match_score = futures['keyword'].result()
+            fuzzy_score = futures['fuzzy'].result()
         
         final_score = (
             tfidf_score * 0.20 +

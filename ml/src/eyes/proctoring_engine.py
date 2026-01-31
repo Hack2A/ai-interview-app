@@ -92,14 +92,14 @@ class ProctoringEngine:
             
             gaze = "center"
             
-            if horizontal_ratio < 0.35:
+            if horizontal_ratio < 0.25:
                 gaze = "left"
-            elif horizontal_ratio > 0.65:
+            elif horizontal_ratio > 0.75:
                 gaze = "right"
             
-            if vertical_ratio > 0.65:
+            if vertical_ratio > 0.75:
                 gaze = "down"
-            elif vertical_ratio < 0.35:
+            elif vertical_ratio < 0.25:
                 gaze = "up"
             
             return gaze, horizontal_ratio, vertical_ratio
@@ -170,12 +170,10 @@ class ProctoringEngine:
         
         face_count, landmarks = self.detect_faces(frame)
         
-        # Check if user left the frame
         if face_count == 0:
             violations.append("user_left")
             return violations, {"face_count": 0, "gaze": "unknown"}
         
-        # Check for multiple people
         if face_count > 1:
             violations.append("multiple_people")
         
@@ -183,18 +181,15 @@ class ProctoringEngine:
         
         gaze, h_ratio, v_ratio = self.calculate_gaze_direction(face_landmarks, frame.shape)
         
-        # Check gaze violations
         if gaze == "down":
             violations.append("looking_down")
         elif gaze in ["left", "right"]:
             violations.append("looking_away")
         
-        # Calculate head pose for additional checks
         try:
             pitch, yaw, roll = self.calculate_head_pose(face_landmarks, frame.shape)
             
-            # Check if head is tilted down significantly
-            if pitch < -15:  # Looking down significantly
+            if pitch < -25:
                 if "looking_down" not in violations:
                     violations.append("head_tilted_down")
         except:

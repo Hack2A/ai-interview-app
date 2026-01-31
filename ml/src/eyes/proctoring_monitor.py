@@ -31,6 +31,18 @@ class ProctoringMonitor:
         if self.is_running:
             return
         
+        print("\n" + "="*60)
+        print("PROCTORING NOTICE:")
+        print("This interview session will use your webcam to monitor")
+        print("for violations such as looking away or multiple people.")
+        print("="*60)
+        consent = input("Do you consent to webcam proctoring? (yes/no): ").strip().lower()
+        
+        if consent not in ['yes', 'y']:
+            logger.info("User declined webcam proctoring")
+            print("[Proctoring] Skipped - User declined consent")
+            return
+        
         try:
             self.cap = cv2.VideoCapture(0)
             if not self.cap.isOpened():

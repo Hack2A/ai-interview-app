@@ -17,8 +17,8 @@ class ATSChecker:
         try:
             self.nlp = spacy.load("en_core_web_sm")
         except OSError:
-            import os
-            os.system("python -m spacy download en_core_web_sm")
+            import subprocess
+            subprocess.run(["python", "-m", "spacy", "download", "en_core_web_sm"], check=True)
             self.nlp = spacy.load("en_core_web_sm")
         
         device = "cuda" if torch.cuda.is_available() else "cpu"

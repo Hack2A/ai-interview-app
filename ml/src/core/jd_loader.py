@@ -32,6 +32,28 @@ class JDLoader:
             return None
     
     def _load_pdf(self, file_path):
+        MAX_FILE_SIZE = 10 * 1024 * 1024
+        
+        if not file_path.is_file():
+            raise ValueError("Invalid file path")
+        
+        if not file_path.suffix.lower() == '.pdf':
+            raise ValueError("File must be PDF")
+        
+        file_size = file_path.stat().st_size
+        if file_size > MAX_FILE_SIZE:
+            raise ValueError(f"File too large: {file_size} bytes (max 10MB)")
+        
+        if file_size == 0:
+            raise ValueError("File is empty")
+        
+        try:
+            file_path_resolved = file_path.resolve()
+            if not str(file_path_resolved).startswith(str(self.jd_dir.resolve())):
+                raise ValueError("Path traversal detected")
+        except:
+            raise ValueError("Invalid file path")
+        
         text = ""
         reader = PdfReader(file_path)
         for page in reader.pages:

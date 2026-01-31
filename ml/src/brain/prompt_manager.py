@@ -1,3 +1,5 @@
+import re
+
 class PromptManager:
     def __init__(self, resume_text=None, rag_engine=None):
         
@@ -13,17 +15,19 @@ class PromptManager:
         )
         
         if resume_text:
+            sanitized_resume = self._sanitize_text(resume_text, max_length=8000)
             self.system_persona += (
                 f"\n\nCONTEXT: Use the candidate's resume below to ask specific questions.\n"
-                f"RESUME DATA:\n{resume_text}"
+                f"RESUME DATA:\n{sanitized_resume}"
             )
 
         self.rag_engine = rag_engine
         if self.rag_engine:
             jd_context = self._get_jd_context()
             if jd_context:
+                sanitized_jd = self._sanitize_text(jd_context, max_length=2000)
                 self.system_persona += (
-                    f"\n\nJOB REQUIREMENTS:\n{jd_context}\n"
+                    f"\n\nJOB REQUIREMENTS:\n{sanitized_jd}\n"
                     "Ask questions to verify the candidate has these specific skills and experiences."
                 )
 
@@ -33,6 +37,32 @@ class PromptManager:
             "Hard": "Ask complex system design questions.",
             "Extreme": "Ask deep architectural questions. Be skeptical."
         }
+    
+    def _sanitize_text(self, text: str, max_length: int = 5000) -> str:
+        if not text:
+            return ""
+        
+        text = text[:max_length]
+        
+        injection_patterns = [
+            r'(?i)(ignore|disregard|forget)\s+(all\s+)?(previous|prior|above)\s+(instructions?|prompts?|commands?)',
+            r'(?i)system\s*:',
+            r'(?i)assistant\s*:',
+            r'(?i)user\s*:',
+            r'(?i)you\s+are\s+now',
+            r'(?i)new\s+instructions?',
+            r'(?i)act\s+as',
+            r'(?i)pretend\s+to\s+be',
+            r'(?i)roleplay',
+        ]
+        
+        for pattern in injection_patterns:
+            text = re.sub(pattern, '[REDACTED]', text)
+        
+        control_chars = ''.join(chr(i) for i in range(32) if i not in [9, 10, 13])
+        text = text.translate(str.maketrans('', '', control_chars))
+        
+        return text.strip()
 
     def _get_jd_context(self):
         if not self.rag_engine:
@@ -52,7 +82,14 @@ class PromptManager:
        
         messages = [{"role": "system", "content": self.system_persona}]
         if history:
-            messages.extend(history)
+            sanitized_history = []
+            for msg in history[-20:]:
+                sanitized_msg = {
+                    "role": msg.get("role", "user"),
+                    "content": self._sanitize_text(msg.get("content", ""), max_length=5000)
+                }
+                sanitized_history.append(sanitized_msg)
+            messages.extend(sanitized_history)
             
         
         return messages

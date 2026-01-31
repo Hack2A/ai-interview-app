@@ -21,8 +21,24 @@ class TTSEngine:
 
     def _start_worker(self):
         worker_path = settings.BASE_DIR / "src" / "voice" / "tts_worker.py"
+        
+        if not worker_path.is_file():
+            print(f"[TTS Error] Worker file not found: {worker_path}")
+            return
+        
+        worker_resolved = worker_path.resolve()
+        expected_dir = (settings.BASE_DIR / "src" / "voice").resolve()
+        
+        if not str(worker_resolved).startswith(str(expected_dir)):
+            print("[TTS Error] Worker path validation failed")
+            return
+        
+        if not worker_path.suffix == '.py':
+            print("[TTS Error] Worker must be a Python file")
+            return
+        
         self.worker_process = subprocess.Popen(
-            [sys.executable, str(worker_path)],
+            [sys.executable, str(worker_resolved)],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,

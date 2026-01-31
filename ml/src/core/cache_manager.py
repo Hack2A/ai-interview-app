@@ -1,6 +1,5 @@
 import hashlib
 import json
-import pickle
 from pathlib import Path
 from functools import lru_cache
 from typing import Any, Optional
@@ -23,27 +22,35 @@ class CacheManager:
         if cache_key in self.embedding_cache:
             return self.embedding_cache[cache_key]
         
-        cache_file = self.cache_dir / f"emb_{cache_key}.pkl"
+        cache_file = self.cache_dir / f"emb_{cache_key}.json"
         if cache_file.exists():
             try:
-                with open(cache_file, 'rb') as f:
-                    data = pickle.load(f)
+                with open(cache_file, 'r') as f:
+                    data = json.load(f)
                     if time.time() - data['timestamp'] < self.cache_ttl:
-                        self.embedding_cache[cache_key] = data['embedding']
-                        return data['embedding']
+                        import numpy as np
+                        embedding = np.array(data['embedding'])
+                        self.embedding_cache[cache_key] = embedding
+                        return embedding
             except:
                 pass
         return None
     
     def set_embedding_cache(self, text: str, embedding: Any):
         cache_key = self._hash_content(text)
-        self.embedding_cache[cache_key] = embedding
+        import numpy as np
+        if isinstance(embedding, np.ndarray):
+            embedding_list = embedding.tolist()
+        else:
+            embedding_list = embedding
         
-        cache_file = self.cache_dir / f"emb_{cache_key}.pkl"
+        self.embedding_cache[cache_key] = embedding if isinstance(embedding, np.ndarray) else np.array(embedding)
+        
+        cache_file = self.cache_dir / f"emb_{cache_key}.json"
         try:
-            with open(cache_file, 'wb') as f:
-                pickle.dump({
-                    'embedding': embedding,
+            with open(cache_file, 'w') as f:
+                json.dump({
+                    'embedding': embedding_list,
                     'timestamp': time.time()
                 }, f)
         except:
@@ -87,11 +94,6 @@ class CacheManager:
     def clear_cache(self):
         self.embedding_cache.clear()
         self.llm_cache.clear()
-        for cache_file in self.cache_dir.glob("*.pkl"):
-            try:
-                cache_file.unlink()
-            except:
-                pass
         for cache_file in self.cache_dir.glob("*.json"):
             try:
                 cache_file.unlink()

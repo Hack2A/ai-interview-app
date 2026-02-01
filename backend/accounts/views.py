@@ -6,7 +6,7 @@ from rest_framework import status
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import User
-from .serializers import RegisterSerializer, LoginSerializer
+from .serializers import RegisterSerializer, LoginSerializer, UserSerializer
 
 def get_tokens(user):
     refresh = RefreshToken.for_user(user)
@@ -23,8 +23,10 @@ class RegisterView(APIView):
 
         return Response({
             "message": "User registered successfully",
+            "user": UserSerializer(user).data,
             "tokens": get_tokens(user)
         }, status=status.HTTP_201_CREATED)
+
 
 class LoginView(APIView):
     def post(self, request):
@@ -33,8 +35,10 @@ class LoginView(APIView):
         user = serializer.validated_data
 
         return Response({
+            "user": UserSerializer(user).data,
             "tokens": get_tokens(user)
         }, status=status.HTTP_200_OK)
+
 
 class GoogleAuthView(APIView):
     def post(self, request):
@@ -46,7 +50,6 @@ class GoogleAuthView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Verify token with Google
         google_url = "https://oauth2.googleapis.com/tokeninfo"
         response = requests.get(google_url, params={"id_token": token})
 
@@ -58,7 +61,6 @@ class GoogleAuthView(APIView):
 
         data = response.json()
 
-        # 🔐 SECURITY CHECK (IMPORTANT)
         if data.get("aud") != settings.GOOGLE_CLIENT_ID:
             return Response(
                 {"error": "Invalid audience"},
@@ -79,7 +81,7 @@ class GoogleAuthView(APIView):
         )
 
         return Response({
+            "user": UserSerializer(user).data,
             "tokens": get_tokens(user),
             "new_user": created
         }, status=status.HTTP_200_OK)
-

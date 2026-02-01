@@ -13,12 +13,17 @@ class CoquiTTSEngine:
             logger.info("Loading Coqui XTTS v2 model...")
             self.tts = TTS("tts_models/multilingual/multi-dataset/xtts_v2")
             
-            if settings.VOICE_CLONE_SAMPLE.exists():
-                self.speaker_wav = str(settings.VOICE_CLONE_SAMPLE)
-                logger.info(f"Using voice clone sample: {self.speaker_wav}")
+            if settings.VOICE_CLONE_SAMPLE and hasattr(settings.VOICE_CLONE_SAMPLE, 'exists'):
+                voice_sample = Path(settings.VOICE_CLONE_SAMPLE)
+                if voice_sample.exists():
+                    self.speaker_wav = str(voice_sample)
+                    logger.info(f"Using voice clone sample: {self.speaker_wav}")
+                else:
+                    self.speaker_wav = None
+                    logger.warning("Voice clone sample not found, using default voice")
             else:
                 self.speaker_wav = None
-                logger.warning("Voice clone sample not found, using default voice")
+                logger.warning("Voice clone sample not configured")
             
             self.sample_rate = 24000
             logger.info("Coqui TTS loaded successfully")

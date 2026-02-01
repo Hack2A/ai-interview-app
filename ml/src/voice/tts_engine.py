@@ -41,7 +41,7 @@ class TTSEngine:
             [sys.executable, str(worker_resolved)],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
             text=True,
             bufsize=1 
         )
@@ -130,6 +130,7 @@ class TTSEngine:
 
     def _producer(self, text_generator):
         for sentence in text_generator:
+            if sentence is None: continue
             if self.stop_signal: break
             if not sentence.strip(): continue
             
@@ -215,26 +216,27 @@ class TTSEngine:
                     except: pass
                 continue
             
-            if self.vad: self.vad.set_mode('speaking')
-            
-            if os.path.exists(filepath):
-                interrupted_by = self._play_with_bargein(filepath)
+            try:
+                if self.vad: self.vad.set_mode('speaking')
                 
-                try: os.remove(filepath)
-                except: pass
+                if os.path.exists(filepath):
+                    interrupted_by = self._play_with_bargein(filepath)
                     
-                if interrupted_by is not None:
-                    print("\n[!] User Interrupted (Speaking Phase).")
-                    self.stop_signal = True
-                    self.interruption_audio = interrupted_by
-                    self._drain_queue()
-                    break
-            else:
-                print(f"[TTS Warning] Audio file not found, skipping playback")
-                tts_failed_count += 1
-                time.sleep(0.5)
-            
-            if self.vad: self.vad.set_mode('listening')
+                    try: os.remove(filepath)
+                    except: pass
+                        
+                    if interrupted_by is not None:
+                        print("\n[!] User Interrupted (Speaking Phase).")
+                        self.stop_signal = True
+                        self.interruption_audio = interrupted_by
+                        self._drain_queue()
+                        break
+                else:
+                    print(f"[TTS Warning] Audio file not found, skipping playback")
+                    tts_failed_count += 1
+                    time.sleep(0.5)
+            finally:
+                if self.vad: self.vad.set_mode('listening')
 
     def _play_with_bargein(self, file_path):
         if not os.path.exists(file_path): return None
@@ -283,6 +285,8 @@ class TTSEngine:
     def _drain_queue(self):
         while not self.audio_queue.empty():
             try:
-                _, f = self.audio_queue.get_nowait()
+                item = self.audio_queue.get_nowait()
+                if item is None: continue
+                _, f = item
                 if os.path.exists(f): os.remove(f)
             except: pass

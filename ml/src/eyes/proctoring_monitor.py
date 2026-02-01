@@ -3,6 +3,7 @@ import threading
 import time
 import logging
 import numpy as np
+from collections import defaultdict
 from src.eyes.proctoring_engine import ProctoringEngine
 from config import settings
 
@@ -14,15 +15,10 @@ class ProctoringMonitor:
         self.is_running = False
         self.thread = None
         self.cap = None
+        self._lock = threading.Lock()
         
         self.violation_log = []
-        self.violation_counters = {
-            "user_left": 0,
-            "multiple_people": 0,
-            "looking_away": 0,
-            "looking_down": 0,
-            "head_tilted_down": 0
-        }
+        self.violation_counters = defaultdict(int)
         
         self.continuous_violation_tracker = {}
         self.threshold_seconds = settings.VIOLATION_THRESHOLD_SECONDS
@@ -93,6 +89,8 @@ class ProctoringMonitor:
                 
                 if should_analyze:
                     violations, metadata = self.engine.analyze_frame(frame)
+                
+                if frame_count % 5 == 0:
                     prev_frame = frame.copy()
                 
                 display_frame = frame.copy()
@@ -149,15 +147,16 @@ class ProctoringMonitor:
         cv2.destroyAllWindows()
     
     def _log_violation(self, violation_type, duration, is_sustained=False):
-        self.violation_counters[violation_type] += 1
-        
-        log_entry = {
-            "type": violation_type,
-            "timestamp": time.time(),
-            "duration": round(duration, 2),
-            "sustained": is_sustained
-        }
-        self.violation_log.append(log_entry)
+        with self._lock:
+            self.violation_counters[violation_type] += 1
+            
+            log_entry = {
+                "type": violation_type,
+                "timestamp": time.time(),
+                "duration": round(duration, 2),
+                "sustained": is_sustained
+            }
+            self.violation_log.append(log_entry)
         
         if is_sustained:
             logger.warning(f"Sustained violation: {violation_type} for {duration:.1f}s")

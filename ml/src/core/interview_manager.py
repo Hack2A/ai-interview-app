@@ -16,14 +16,21 @@ from src.core.jd_loader import JDLoader
 from src.brain.rag_engine import RAGEngine
 from src.core.ats_checker import ATSChecker
 
+_proctoring_available = False
 if settings.ENABLE_PROCTORING:
-    from src.eyes.proctoring_monitor import ProctoringMonitor
+    try:
+        from src.eyes.proctoring_monitor import ProctoringMonitor
+        _proctoring_available = True
+    except ImportError:
+        pass
 
+_coqui_available = False
 if settings.USE_ADVANCED_TTS:
     try:
         from src.voice.tts_coqui import CoquiTTSEngine
-    except:
-        settings.USE_ADVANCED_TTS = False
+        _coqui_available = True
+    except ImportError:
+        pass
 
 class InterviewManager:
     def __init__(self):
@@ -80,9 +87,13 @@ class InterviewManager:
     
     @property
     def proctoring(self):
-        if self._proctoring is None and settings.ENABLE_PROCTORING:
+        if self._proctoring is None and settings.ENABLE_PROCTORING and _proctoring_available:
             self._proctoring = ProctoringMonitor()
         return self._proctoring
+    
+    @proctoring.setter
+    def proctoring(self, value):
+        self._proctoring = value
     
     @property
     def ats_checker(self):
@@ -117,9 +128,11 @@ class InterviewManager:
                 for gap in ats_report['llm_gaps'][:5]:
                     print(f"  - {gap}")
         
-        print(f"\nMatched Skills ({len(ats_report['matched_skills'])}): {', '.join(ats_report['matched_skills'][:10])}")
-        if ats_report['missing_skills']:
-            print(f"\nMissing Skills ({len(ats_report['missing_skills'])}): {', '.join(ats_report['missing_skills'][:10])}")
+        matched_skills = ats_report.get('matched_skills', [])
+        missing_skills = ats_report.get('missing_skills', [])
+        print(f"\nMatched Skills ({len(matched_skills)}): {', '.join(matched_skills[:10])}")
+        if missing_skills:
+            print(f"\nMissing Skills ({len(missing_skills)}): {', '.join(missing_skills[:10])}")
         
         if ats_report['suggestions']:
             print("\nSuggestions:")
@@ -129,8 +142,9 @@ class InterviewManager:
         print("="*50)
         proceed = input("\nProceed with interview? [Y/n]: ").strip().lower()
         if proceed and proceed not in ['y', 'yes', '']:
-            print("Exiting...")
-            exit(0)
+            print("Interview cancelled by user.")
+            return False
+        return True
 
     def _configure_session(self):
         print("\n" + "="*40 + "\n      BEAVER AI - SESSION SETUP\n" + "="*40)
@@ -139,7 +153,8 @@ class InterviewManager:
             resume_text = self.resume_loader.load_resume()
             jd_text = self.jd_loader.load_jd()
             if resume_text and jd_text:
-                self._run_ats_check(resume_text, jd_text)
+                if not self._run_ats_check(resume_text, jd_text):
+                    return False
         
         print("\nPlease select the interview difficulty:\n [1] Easy\n [2] Medium\n [3] Hard\n [4] Extreme")
         choice = input("\nEnter choice (1-4) [Default: 2]: ").strip()
@@ -208,7 +223,11 @@ class InterviewManager:
                     print(">> Waiting for confirmation...")
                     
                     confirm_audio = self.recorder.listen_and_record()
-                    sf.write(str(temp_wav), confirm_audio, 16000)
+                    if confirm_audio is not None and len(confirm_audio) > 0:
+                        sf.write(str(temp_wav), confirm_audio, 16000)
+                    else:
+                        print("No audio recorded, assuming exit.")
+                        confirm_text = "yes"
                     confirm_text, _ = self.ears.transcribe(str(temp_wav))
                     confirm_text = confirm_text.lower()
                     print(f"[Confirmation]: {confirm_text}")
@@ -272,8 +291,9 @@ class InterviewManager:
                     print("[Report] Analyzing sentiment and speech quality...")
                     sentiment_results = []
                     for i, audio_path in enumerate(self.audio_responses):
-                        if Path(audio_path).exists() and i < len(history) and history[i]['role'] == 'user':
-                            result = self.sentiment_analyzer.analyze_full(audio_path, history[i]['content'])
+                        hist_idx = i - 1
+                        if Path(audio_path).exists() and hist_idx < len(history) and history[hist_idx]['role'] == 'user':
+                            result = self.sentiment_analyzer.analyze_full(audio_path, history[hist_idx]['content'])
                             sentiment_results.append(result)
                     
                     if sentiment_results:
@@ -283,7 +303,7 @@ class InterviewManager:
                             for emotion, score in r['emotions'].items():
                                 all_emotions[emotion] = all_emotions.get(emotion, 0) + score
                         
-                        dominant_emotion = max(all_emotions.items(), key=lambda x: x[1])[0]
+                        dominant_emotion = max(all_emotions.items(), key=lambda x: x[1])[0] if all_emotions else "neutral"
                         total_fillers = sum([r['fillers']['total_fillers'] for r in sentiment_results])
                         avg_wpm = np.mean([r['speech_metrics'].get('wpm', 0) for r in sentiment_results])
                         

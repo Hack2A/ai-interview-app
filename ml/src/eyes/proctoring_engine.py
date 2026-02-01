@@ -51,7 +51,7 @@ class ProctoringEngine:
             if not face_landmarks or not face_landmarks.landmark:
                 return "unknown", 0.5, 0.5
             
-            if len(face_landmarks.landmark) < max(self.iris_left + self.left_eye_indices):
+            if len(face_landmarks.landmark) <= max(self.iris_left + self.left_eye_indices):
                 return "unknown", 0.5, 0.5
             
             left_iris_points = []
@@ -110,6 +110,14 @@ class ProctoringEngine:
     def calculate_head_pose(self, face_landmarks, frame_shape):
         h, w = frame_shape[:2]
         
+        required_indices = [1, 152, 33, 263, 61, 291]
+        max_index = max(required_indices)
+        
+        if len(face_landmarks.landmark) <= max_index:
+            logger = logging.getLogger("ProctoringEngine")
+            logger.error(f"Insufficient landmarks: {len(face_landmarks.landmark)} <= {max_index}")
+            return 0, 0, 0
+        
         nose_tip = face_landmarks.landmark[1]
         chin = face_landmarks.landmark[152]
         left_eye = face_landmarks.landmark[33]
@@ -159,9 +167,9 @@ class ProctoringEngine:
         rotation_matrix, _ = cv2.Rodrigues(rotation_vector)
         angles, _, _, _, _, _ = cv2.RQDecomp3x3(rotation_matrix)
         
-        pitch = angles[0] * 360
-        yaw = angles[1] * 360
-        roll = angles[2] * 360
+        pitch = angles[0]
+        yaw = angles[1]
+        roll = angles[2]
         
         return pitch, yaw, roll
     

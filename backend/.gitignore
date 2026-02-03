@@ -1,0 +1,50 @@
+# ------------------------
+# Python
+# ------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+
+# ------------------------
+# Virtual Environment
+# ------------------------
+env/
+venv/
+.venv/
+
+# ------------------------
+# Environment Variables
+# ------------------------
+.env
+
+# ------------------------
+# Django
+# ------------------------
+db.sqlite3
+media/
+staticfiles/
+
+# Migrations (keep __init__.py)
+**/migrations/*
+!**/migrations/__init__.py
+
+# ------------------------
+# Logs
+# ------------------------
+*.log
+
+# ------------------------
+# OS / Editor
+# ------------------------
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+
+# ------------------------
+# Node / Frontend (if added later)
+# ------------------------
+node_modules/
+dist/
+build/

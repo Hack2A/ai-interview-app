@@ -20,6 +20,7 @@ INSTALLED_APPS = [
 
     'rest_framework',
     'accounts',
+    'onboard',
 ]
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -68,4 +69,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
+
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
 

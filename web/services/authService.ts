@@ -3,16 +3,16 @@ import apiClient from "./apiClient";
 export const authService = {
 	// Authentication service methods will be implemented here
 	login: async (credentials: { email: string; password: string }) => {
-		return apiClient.post("/auth/login", credentials);
+		return apiClient.post("/auth/login/", credentials);
 	},
 
 	register: async (userData: { email: string; password: string }) => {
-		return apiClient.post("/auth/register", userData);
+		return apiClient.post("/auth/register/", userData);
 	},
 
 	logout: async () => {
 		localStorage.removeItem("token");
-		return apiClient.post("/auth/logout");
+		return apiClient.post("/auth/logout/");
 	},
 
 	// Check if user is authenticated

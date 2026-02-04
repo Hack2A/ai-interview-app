@@ -1,5 +1,6 @@
 "use client";
 
+import { authService } from "@/services/authService";
 import { useForm } from "react-hook-form";
 
 type LoginFormData = {
@@ -15,7 +16,12 @@ export default function LoginForm() {
     } = useForm<LoginFormData>();
 
     const onSubmit = (data: LoginFormData) => {
-        console.log(data);
+        authService.login(data).then((response) => {
+            if (response.data.token) {
+                localStorage.setItem("token", response.data.tokens.access);
+                window.location.href = "/dashboard";
+            }
+        });
     };
 
     return (

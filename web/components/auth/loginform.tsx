@@ -1,5 +1,6 @@
 "use client";
 
+import { navigate } from "@/lib/navigation";
 import { authService } from "@/services/authService";
 import { useForm } from "react-hook-form";
 
@@ -17,9 +18,9 @@ export default function LoginForm() {
 
     const onSubmit = (data: LoginFormData) => {
         authService.login(data).then((response) => {
-            if (response.data.token) {
+            if (response.data.tokens) {
                 localStorage.setItem("token", response.data.tokens.access);
-                window.location.href = "/dashboard";
+                navigate("/dashboard", true);
             }
         });
     };

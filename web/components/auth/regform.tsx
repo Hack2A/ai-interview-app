@@ -1,6 +1,8 @@
 "use client";
 
 import { useForm } from "react-hook-form";
+import GoogleAuth from "./GoogleAuth";
+import { navigate } from "@/lib/navigation";
 
 type RegisterFormData = {
     email: string;
@@ -30,7 +32,7 @@ export default function RegisterForm() {
                 <div>
                     <label
                         htmlFor="email"
-                        className="block text-sm font-medium text-gray-300 mb-2"
+                        className="block text-sm font-medium text-gray-700 mb-2"
                     >
                         Email
                     </label>
@@ -44,11 +46,11 @@ export default function RegisterForm() {
                                 message: "Invalid email address",
                             },
                         })}
-                        className="w-full px-4 py-3 bg-[#1a1d2e] border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                        className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                         placeholder="Enter your email"
                     />
                     {errors.email && (
-                        <p className="mt-2 text-sm text-red-400">{errors.email.message}</p>
+                        <p className="mt-2 text-sm text-red-500">{errors.email.message}</p>
                     )}
                 </div>
 
@@ -56,7 +58,7 @@ export default function RegisterForm() {
                 <div>
                     <label
                         htmlFor="uname"
-                        className="block text-sm font-medium text-gray-300 mb-2"
+                        className="block text-sm font-medium text-gray-700 mb-2"
                     >
                         Username
                     </label>
@@ -74,11 +76,11 @@ export default function RegisterForm() {
                                 message: "Username can only contain letters, numbers, and underscores",
                             },
                         })}
-                        className="w-full px-4 py-3 bg-[#1a1d2e] border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                        className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                         placeholder="Enter your username"
                     />
                     {errors.uname && (
-                        <p className="mt-2 text-sm text-red-400">{errors.uname.message}</p>
+                        <p className="mt-2 text-sm text-red-500">{errors.uname.message}</p>
                     )}
                 </div>
 
@@ -86,7 +88,7 @@ export default function RegisterForm() {
                 <div>
                     <label
                         htmlFor="password"
-                        className="block text-sm font-medium text-gray-300 mb-2"
+                        className="block text-sm font-medium text-gray-700 mb-2"
                     >
                         Password
                     </label>
@@ -100,11 +102,11 @@ export default function RegisterForm() {
                                 message: "Password must be at least 6 characters",
                             },
                         })}
-                        className="w-full px-4 py-3 bg-[#1a1d2e] border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                        className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                         placeholder="Enter your password"
                     />
                     {errors.password && (
-                        <p className="mt-2 text-sm text-red-400">
+                        <p className="mt-2 text-sm text-red-500">
                             {errors.password.message}
                         </p>
                     )}
@@ -114,7 +116,7 @@ export default function RegisterForm() {
                 <div>
                     <label
                         htmlFor="confirmPassword"
-                        className="block text-sm font-medium text-gray-300 mb-2"
+                        className="block text-sm font-medium text-gray-700 mb-2"
                     >
                         Confirm Password
                     </label>
@@ -126,11 +128,11 @@ export default function RegisterForm() {
                             validate: (value) =>
                                 value === password || "Passwords do not match",
                         })}
-                        className="w-full px-4 py-3 bg-[#1a1d2e] border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                        className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                         placeholder="Confirm your password"
                     />
                     {errors.confirmPassword && (
-                        <p className="mt-2 text-sm text-red-400">
+                        <p className="mt-2 text-sm text-red-500">
                             {errors.confirmPassword.message}
                         </p>
                     )}
@@ -139,11 +141,24 @@ export default function RegisterForm() {
                 {/* Submit Button */}
                 <button
                     type="submit"
-                    className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-[#0f1117]"
+                    className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-white"
                 >
                     Sign Up
                 </button>
             </form>
+
+            {/* Google OAuth */}
+            <GoogleAuth
+                buttonText="signup_with"
+                redirectPath="/dashboard"
+                onSuccess={(response) => {
+                    console.log("Google signup successful:", response);
+                    navigate("/dashboard", true);
+                }}
+                onError={(error) => {
+                    console.error("Google signup failed:", error);
+                }}
+            />
         </div>
     );
 }

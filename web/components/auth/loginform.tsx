@@ -3,6 +3,7 @@
 import { navigate } from "@/lib/navigation";
 import { authService } from "@/services/authService";
 import { useForm } from "react-hook-form";
+import GoogleAuth from "./GoogleAuth";
 
 type LoginFormData = {
     email: string;
@@ -32,7 +33,7 @@ export default function LoginForm() {
                 <div>
                     <label
                         htmlFor="email"
-                        className="block text-sm font-medium text-gray-300 mb-2"
+                        className="block text-sm font-medium text-gray-700 mb-2"
                     >
                         Email
                     </label>
@@ -46,11 +47,11 @@ export default function LoginForm() {
                                 message: "Invalid email address",
                             },
                         })}
-                        className="w-full px-4 py-3 bg-[#1a1d2e] border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                        className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                         placeholder="Enter your email"
                     />
                     {errors.email && (
-                        <p className="mt-2 text-sm text-red-400">{errors.email.message}</p>
+                        <p className="mt-2 text-sm text-red-500">{errors.email.message}</p>
                     )}
                 </div>
 
@@ -58,7 +59,7 @@ export default function LoginForm() {
                 <div>
                     <label
                         htmlFor="password"
-                        className="block text-sm font-medium text-gray-300 mb-2"
+                        className="block text-sm font-medium text-gray-700 mb-2"
                     >
                         Password
                     </label>
@@ -72,11 +73,11 @@ export default function LoginForm() {
                                 message: "Password must be at least 6 characters",
                             },
                         })}
-                        className="w-full px-4 py-3 bg-[#1a1d2e] border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                        className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                         placeholder="Enter your password"
                     />
                     {errors.password && (
-                        <p className="mt-2 text-sm text-red-400">
+                        <p className="mt-2 text-sm text-red-500">
                             {errors.password.message}
                         </p>
                     )}
@@ -85,11 +86,24 @@ export default function LoginForm() {
                 {/* Submit Button */}
                 <button
                     type="submit"
-                    className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-[#0f1117]"
+                    className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-white"
                 >
                     Sign In
                 </button>
             </form>
+
+            {/* Google OAuth */}
+            <GoogleAuth
+                buttonText="signin_with"
+                redirectPath="/dashboard"
+                onSuccess={(response) => {
+                    console.log("Google login successful:", response);
+                    navigate("/dashboard", true);
+                }}
+                onError={(error) => {
+                    console.error("Google login failed:", error);
+                }}
+            />
         </div>
     );
 }

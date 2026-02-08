@@ -89,7 +89,7 @@ export default function GoogleAuth({
 						</div>
 						<div className="relative flex justify-center text-sm">
 							<span className="px-2 bg-white text-gray-500">
-								Or continue with
+								or
 							</span>
 						</div>
 					</div>

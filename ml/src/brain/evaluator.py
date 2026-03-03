@@ -1,25 +1,34 @@
 import json
 import logging
-from config import settings
+from pathlib import Path
+
 from llama_cpp import Llama
+
+from config import settings
 
 logger = logging.getLogger("Evaluator")
 
+MAX_EVAL_TOKENS = 800
+EVAL_TEMPERATURE = 0.1
+EVAL_CONTEXT_SIZE = 4096
+
 class Evaluator:
-    def __init__(self, model_path):
+    """Generates post-interview evaluation reports using the LLM."""
+
+    def __init__(self, model_path: str | Path) -> None:
         self.model_path = model_path
-        self.llm = None
+        self.llm: Llama | None = None
     
-    def _ensure_llm_loaded(self):
+    def _ensure_llm_loaded(self) -> None:
         if self.llm is None:
             self.llm = Llama(
                 model_path=str(self.model_path),
-                n_ctx=4096,
-                verbose=False
+                n_ctx=EVAL_CONTEXT_SIZE,
+                verbose=False,
             )
 
-    def generate_report(self, history):
-        
+    def generate_report(self, history: list[dict]) -> dict:
+        """Generate a structured evaluation report from interview history."""
         logger.info("Generating Final Evaluation Report...")
         
         if len(history) < 1:
@@ -64,8 +73,8 @@ class Evaluator:
         try:
             output = self.llm.create_chat_completion(
                 messages=[{"role": "user", "content": prompt}],
-                max_tokens=800,
-                temperature=0.1,
+                max_tokens=MAX_EVAL_TOKENS,
+                temperature=EVAL_TEMPERATURE,
                 response_format={"type": "json_object"}
             )
             return json.loads(output['choices'][0]['message']['content'])

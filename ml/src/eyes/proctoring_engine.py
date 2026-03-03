@@ -1,12 +1,22 @@
+import logging
+from typing import Optional
+
 import cv2
 import mediapipe as mp
 import numpy as np
-import logging
 
 logger = logging.getLogger("ProctoringEngine")
 
+GAZE_LEFT_THRESHOLD = 0.25
+GAZE_RIGHT_THRESHOLD = 0.75
+GAZE_UP_THRESHOLD = 0.25
+GAZE_DOWN_THRESHOLD = 0.75
+HEAD_TILT_DOWN_THRESHOLD = -25
+
 class ProctoringEngine:
-    def __init__(self):
+    """Computer vision engine for interview proctoring using MediaPipe FaceMesh."""
+
+    def __init__(self) -> None:
         try:
             from mediapipe.python.solutions import face_mesh as mp_face_mesh
             
@@ -17,7 +27,7 @@ class ProctoringEngine:
                 min_detection_confidence=0.5,
                 min_tracking_confidence=0.5
             )
-        except:
+        except (ImportError, AttributeError):
             self.mp_face_mesh = mp.solutions.face_mesh
             self.face_mesh = self.mp_face_mesh.FaceMesh(
                 max_num_faces=2,
@@ -34,8 +44,8 @@ class ProctoringEngine:
         self.right_eye_indices = [362, 263, 387, 386, 385, 384, 398]
         
         logger.info("Proctoring engine initialized")
-    
-    def detect_faces(self, frame):
+
+    def detect_faces(self, frame: np.ndarray) -> tuple[int, Optional[list]]:
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         results = self.face_mesh.process(rgb_frame)
         
@@ -43,8 +53,8 @@ class ProctoringEngine:
             return 0, None
         
         return len(results.multi_face_landmarks), results.multi_face_landmarks
-    
-    def calculate_gaze_direction(self, face_landmarks, frame_shape):
+
+    def calculate_gaze_direction(self, face_landmarks, frame_shape: tuple) -> tuple[str, float, float]:
         try:
             h, w = frame_shape[:2]
             
@@ -92,22 +102,23 @@ class ProctoringEngine:
             
             gaze = "center"
             
-            if horizontal_ratio < 0.25:
+            if horizontal_ratio < GAZE_LEFT_THRESHOLD:
                 gaze = "left"
-            elif horizontal_ratio > 0.75:
+            elif horizontal_ratio > GAZE_RIGHT_THRESHOLD:
                 gaze = "right"
             
-            if vertical_ratio > 0.75:
+            if vertical_ratio > GAZE_DOWN_THRESHOLD:
                 gaze = "down"
-            elif vertical_ratio < 0.25:
+            elif vertical_ratio < GAZE_UP_THRESHOLD:
                 gaze = "up"
             
             return gaze, horizontal_ratio, vertical_ratio
         except Exception as e:
             logger.error(f"Gaze calculation error: {e}")
             return "unknown", 0.5, 0.5
-    
-    def calculate_head_pose(self, face_landmarks, frame_shape):
+
+    def calculate_head_pose(self, face_landmarks, frame_shape: tuple) -> tuple[float, float, float]:
+        """Estimate head pose (pitch, yaw, roll) using solvePnP."""
         h, w = frame_shape[:2]
         
         required_indices = [1, 152, 33, 263, 61, 291]
@@ -172,8 +183,9 @@ class ProctoringEngine:
         roll = angles[2]
         
         return pitch, yaw, roll
-    
-    def analyze_frame(self, frame):
+
+    def analyze_frame(self, frame: np.ndarray) -> tuple[list[str], dict]:
+        """Analyze a single frame for proctoring violations."""
         violations = []
         
         face_count, landmarks = self.detect_faces(frame)
@@ -197,10 +209,11 @@ class ProctoringEngine:
         try:
             pitch, yaw, roll = self.calculate_head_pose(face_landmarks, frame.shape)
             
-            if pitch < -25:
+            if pitch < HEAD_TILT_DOWN_THRESHOLD:
                 if "looking_down" not in violations:
                     violations.append("head_tilted_down")
-        except:
+        except (cv2.error, ValueError, IndexError) as e:
+            logger.debug(f"Head pose estimation failed: {e}")
             pitch, yaw, roll = 0, 0, 0
         
         return violations, {
@@ -208,6 +221,7 @@ class ProctoringEngine:
             "gaze": gaze,
             "head_pose": {"pitch": pitch, "yaw": yaw, "roll": roll}
         }
-    
-    def cleanup(self):
+
+    def cleanup(self) -> None:
+        """Release MediaPipe resources."""
         self.face_mesh.close()

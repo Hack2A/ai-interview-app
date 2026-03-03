@@ -1,15 +1,33 @@
+"""TTS Worker subprocess — receives text via stdin, generates WAV files via pyttsx3."""
 import sys
 import os
 import pyttsx3
 from pathlib import Path
 
-BASE_TTS_DIR = Path("data/temp/tts")
-BASE_TTS_DIR.mkdir(parents=True, exist_ok=True)
+# Project root for path validation
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+ALLOWED_TEMP_DIR = PROJECT_ROOT / "data" / "temp"
+
+
+def _is_safe_path(filepath: str) -> bool:
+    """Validate that the filepath is within the project's temp directory."""
+    try:
+        resolved = Path(filepath).resolve()
+        return str(resolved).startswith(str(ALLOWED_TEMP_DIR.resolve()))
+    except (ValueError, OSError):
+        return False
+
 
 def main():
     try:
         engine = pyttsx3.init()
         engine.setProperty('rate', 190)
+        # Try to set a natural-sounding voice
+        voices = engine.getProperty('voices')
+        for voice in voices:
+            if 'david' in voice.name.lower() or 'mark' in voice.name.lower():
+                engine.setProperty('voice', voice.id)
+                break
     except Exception as e:
         sys.stderr.write(f"ERROR: Failed to init TTS: {e}\n")
         sys.stderr.flush()
@@ -23,53 +41,56 @@ def main():
             line = sys.stdin.readline()
             if not line:
                 break
-            
+
             data = line.strip()
             if "|" not in data:
                 sys.stdout.write("SKIP\n")
                 sys.stdout.flush()
                 continue
-            
-            filename, text = data.split("|", 1)
-            
+
+            filepath, text = data.split("|", 1)
+
             if not text.strip():
                 sys.stdout.write("SKIP\n")
                 sys.stdout.flush()
                 continue
-            
-            if not filename or Path(filename).is_absolute() or '..' in filename:
+
+            # Validate path is within project temp directory
+            if not filepath or '..' in filepath or not _is_safe_path(filepath):
+                sys.stderr.write(f"WARN: Rejected path: {filepath}\n")
+                sys.stderr.flush()
                 sys.stdout.write("SKIP\n")
                 sys.stdout.flush()
                 continue
-            
-            safe_path = (BASE_TTS_DIR / filename).resolve()
-            if not str(safe_path).startswith(str(BASE_TTS_DIR.resolve())):
-                sys.stdout.write("SKIP\n")
-                sys.stdout.flush()
-                continue
-            
+
+            safe_path = Path(filepath).resolve()
             safe_path.parent.mkdir(parents=True, exist_ok=True)
-            
+
             try:
                 engine.save_to_file(text, str(safe_path))
                 engine.runAndWait()
-                
+
                 if safe_path.exists() and safe_path.stat().st_size > 0:
-                    sys.stdout.write(f"DONE\n")
+                    sys.stderr.write(f"OK: Generated {safe_path.stat().st_size}b -> {safe_path.name}\n")
+                    sys.stderr.flush()
+                    sys.stdout.write("DONE\n")
                 else:
-                    sys.stdout.write(f"FAIL\n")
+                    sys.stderr.write(f"WARN: File not created at {safe_path}\n")
+                    sys.stderr.flush()
+                    sys.stdout.write("FAIL\n")
             except Exception as e:
                 sys.stderr.write(f"ERROR: Synthesis failed: {e}\n")
                 sys.stderr.flush()
                 sys.stdout.write("FAIL\n")
-            
+
             sys.stdout.flush()
-            
+
         except Exception as e:
             sys.stderr.write(f"ERROR: {e}\n")
             sys.stderr.flush()
             sys.stdout.write("ERROR\n")
             sys.stdout.flush()
+
 
 if __name__ == "__main__":
     main()

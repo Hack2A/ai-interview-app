@@ -1,292 +1,220 @@
+"""TTS Engine — edge-tts (primary) with piper-tts (offline fallback).
+
+Uses Microsoft Edge's neural TTS voices via edge_tts library (free, no API key).
+Falls back to Piper TTS for offline use when internet is unavailable.
+"""
+import asyncio
+import io
+import logging
 import os
-import sys
+import tempfile
 import time
-import subprocess
+import wave
+from pathlib import Path
+from typing import Generator
+
+import numpy as np
 import sounddevice as sd
 import soundfile as sf
-import numpy as np
-import threading
-import queue
+
 from config import settings
 
+logger = logging.getLogger("TTSEngine")
+
+# Edge-TTS voice selection
+EDGE_VOICE = "en-US-GuyNeural"
+EDGE_VOICE_FALLBACKS = ["en-US-ChristopherNeural", "en-US-EricNeural", "en-US-AndrewNeural"]
+
+# Piper model config
+PIPER_MODEL_PATH = settings.TTS_MODEL_PATH
+
+# Attempt imports
+_edge_tts_available = False
+try:
+    import edge_tts
+    _edge_tts_available = True
+except ImportError:
+    logger.warning("edge-tts not installed. Install with: pip install edge-tts")
+
+_piper_available = False
+try:
+    from piper import PiperVoice
+    _piper_available = True
+except ImportError:
+    logger.warning("piper-tts not installed. Install with: pip install piper-tts")
+
+
 class TTSEngine:
-    def __init__(self, vad_module=None):
+    """Text-to-Speech engine with edge-tts (online) and piper (offline) backends."""
+
+    def __init__(self, vad_module=None) -> None:
         self.vad = vad_module
-        self.audio_queue = queue.Queue()
-        self.stop_signal = False
-        self.worker_process = None
-        
-        
-        self._start_worker()
+        self._piper_voice = None
+        self._edge_failed_count = 0
+        self._max_edge_failures = 5
 
-    def _start_worker(self):
-        worker_path = settings.BASE_DIR / "src" / "voice" / "tts_worker.py"
-        
-        if not worker_path.is_file():
-            print(f"[TTS Error] Worker file not found: {worker_path}")
-            return
-        
-        worker_resolved = worker_path.resolve()
-        expected_dir = (settings.BASE_DIR / "src" / "voice").resolve()
-        
-        if not str(worker_resolved).startswith(str(expected_dir)):
-            print("[TTS Error] Worker path validation failed")
-            return
-        
-        if not worker_path.suffix == '.py':
-            print("[TTS Error] Worker must be a Python file")
-            return
-        
-        self.worker_process = subprocess.Popen(
-            [sys.executable, str(worker_resolved)],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            bufsize=1 
-        )
+        # Ensure temp directory exists
+        self._temp_dir = settings.BASE_DIR / "data" / "temp"
+        self._temp_dir.mkdir(parents=True, exist_ok=True)
 
-    def speak_stream(self, text_generator):
-        """Non-blocking TTS - prints immediately, audio plays in background"""
-        collected_text = []
-        
+        # Create or get event loop for async edge-tts
+        try:
+            self._loop = asyncio.new_event_loop()
+        except Exception:
+            self._loop = asyncio.get_event_loop()
+
+        logger.info(f"TTS Engine initialized (edge-tts: {_edge_tts_available}, piper: {_piper_available})")
+
+    def _get_piper_voice(self):
+        """Lazy-load Piper voice model."""
+        if self._piper_voice is None and _piper_available:
+            model_path = PIPER_MODEL_PATH
+            if model_path.exists():
+                try:
+                    self._piper_voice = PiperVoice.load(str(model_path))
+                    logger.info(f"Piper voice loaded: {model_path.name}")
+                except Exception as e:
+                    logger.error(f"Failed to load Piper voice: {e}")
+            else:
+                logger.warning(f"Piper model not found at: {model_path}")
+        return self._piper_voice
+
+    # ── Public API ────────────────────────────────────────────────
+
+    def speak_text(self, text: str) -> None:
+        """Speak a single text string synchronously."""
+        print(f"\n[BeaverAI]: {text}")
+        self._synthesize_and_play(text)
+
+    def speak_stream(self, text_generator: Generator) -> None:
+        """Collect streamed text, print it, then speak the full result."""
+        collected = []
+
         print("\n[BeaverAI]:", end=" ", flush=True)
-        
+
         for sentence in text_generator:
             if not sentence or not sentence.strip():
                 continue
-            
             print(sentence, end=" ", flush=True)
-            collected_text.append(sentence)
-        
-        print()  
-        
-        full_text = " ".join(collected_text)
-        if full_text.strip():
-            threading.Thread(
-                target=self._try_tts_background, 
-                args=(full_text,),
-                daemon=True
-            ).start()
-        
+            collected.append(sentence)
+
+        print()
+
+        full_text = " ".join(collected).strip()
+        if full_text:
+            self._synthesize_and_play(full_text)
+
         return None
-    
-    def _try_tts_background(self, text):
-        """Attempt TTS in background - failures don't affect interview"""
+
+    # ── Core Synthesis ────────────────────────────────────────────
+
+    def _synthesize_and_play(self, text: str) -> None:
+        """Try edge-tts, fall back to piper, play audio."""
+        if not text.strip():
+            return
+
         try:
             if self.vad:
                 self.vad.set_mode('speaking')
-            
-            # Skip TTS if worker process is not running properly
-            if not self.worker_process or self.worker_process.poll() is not None:
-                print(f"[TTS] Worker process not available, skipping audio")
-                if self.vad:
-                    self.vad.set_mode('listening')
-                return
-            
-            timestamp = int(time.time() * 1000000)
-            filepath = settings.BASE_DIR / "data" / "temp" / f"tts_{timestamp}.wav"
-            
-            msg = f"{str(filepath)}|{text}\n"
-            try:
-                self.worker_process.stdin.write(msg)
-                self.worker_process.stdin.flush()
-            except Exception as e:
-                print(f"[TTS] Worker communication failed: {e}, skipping audio")
-                if self.vad:
-                    self.vad.set_mode('listening')
-                return
-            
-            # Wait longer for file generation (increased from 0.5s to 2s)
-            max_wait = 2.0
-            wait_interval = 0.1
-            elapsed = 0
-            
-            while elapsed < max_wait:
-                if os.path.exists(filepath) and os.path.getsize(filepath) > 100:
-                    break
-                time.sleep(wait_interval)
-                elapsed += wait_interval
-            
-            if os.path.exists(filepath) and os.path.getsize(filepath) > 100:
+
+            audio_path = None
+
+            # Primary: edge-tts (online, neural quality)
+            if _edge_tts_available and self._edge_failed_count < self._max_edge_failures:
+                audio_path = self._synthesize_edge(text)
+                if not audio_path:
+                    self._edge_failed_count += 1
+                    logger.warning(f"edge-tts failed ({self._edge_failed_count}/{self._max_edge_failures})")
+
+            # Fallback: piper (offline, still good quality)
+            if not audio_path and _piper_available:
+                audio_path = self._synthesize_piper(text)
+
+            # Play audio
+            if audio_path and os.path.exists(audio_path):
+                self._play_audio(audio_path)
                 try:
-                    data, fs = sf.read(filepath, dtype='float32')
-                    sd.play(data, samplerate=fs)
-                    sd.wait()
-                except Exception as e:
-                    print(f"[TTS] Audio playback failed: {e}")
-                finally:
-                    try:
-                        os.remove(filepath)
-                    except:
-                        pass
+                    os.remove(audio_path)
+                except OSError:
+                    pass
             else:
-                print(f"[TTS] Audio file not generated, continuing without audio")
+                logger.debug("No TTS audio generated, continuing silently")
+
         except Exception as e:
-            print(f"[TTS] Background TTS error: {e}")
+            logger.error(f"TTS error: {e}")
         finally:
             if self.vad:
                 self.vad.set_mode('listening')
 
-    def _producer(self, text_generator):
-        for sentence in text_generator:
-            if sentence is None: continue
-            if self.stop_signal: break
-            if not sentence.strip(): continue
-            
-            timestamp = int(time.time() * 1000000)
-            filepath = settings.BASE_DIR / "data" / "temp" / f"tts_{timestamp}.wav"
-            
-            try:
-                msg = f"{str(filepath)}|{sentence}\n"
-                self.worker_process.stdin.write(msg)
-                self.worker_process.stdin.flush()
-                
-                start_time = time.time()
-                while time.time() - start_time < 5.0:
-                    if self.worker_process.poll() is not None:
-                        print(f"[TTS Error] Worker process died, restarting...")
-                        self._start_worker()
-                        break
-                    
-                    try:
-                        import select
-                        if sys.platform == "win32":
-                            resp = self.worker_process.stdout.readline()
-                        else:
-                            ready = select.select([self.worker_process.stdout], [], [], 0.1)
-                            if ready[0]:
-                                resp = self.worker_process.stdout.readline()
-                            else:
-                                time.sleep(0.1)
-                                continue
-                        
-                        if "DONE" in resp or "SKIP" in resp:
-                            self.audio_queue.put((sentence, str(filepath)))
-                            break
-                        elif "FAIL" in resp:
-                            print(f"[TTS Warning] Synthesis failed for: {sentence[:30]}...")
-                            break
-                    except:
-                        time.sleep(0.1)
-                        continue
-                else:
-                    print(f"[TTS Warning] Timeout waiting for worker response")
-                    
-            except Exception as e:
-                print(f"[TTS Error] Worker communication failed: {e}")
-                try:
-                    self.worker_process.kill()
-                except:
-                    pass
-                self._start_worker()
+    def _synthesize_edge(self, text: str) -> str | None:
+        """Generate audio using edge-tts (Microsoft neural voices)."""
+        timestamp = int(time.time() * 1000000)
+        output_path = str(self._temp_dir / f"tts_{timestamp}.mp3")
 
-        self.audio_queue.put(None)
-
-    def _consumer(self):
-        self.interruption_audio = None
-        tts_failed_count = 0
-        
-        while True:
-            if self.stop_signal:
-                self._drain_queue()
-                break
-
-            try:
-                item = self.audio_queue.get_nowait()
-            except queue.Empty:
-                
-                interrupt = self._listen_during_silence(0.1)
-                if interrupt is not None:
-                    print("\n[!] User Interrupted (Thinking Phase).")
-                    self.stop_signal = True
-                    self.interruption_audio = interrupt
-                    break
-                continue
-            
-            if item is None: break
-            
-            text, filepath = item
-            print(f"\n[BeaverAI]: {text}")
-            
-            if tts_failed_count > 3:
-                print("[TTS] Too many failures, continuing without audio...")
-                if os.path.exists(filepath):
-                    try: os.remove(filepath)
-                    except: pass
-                continue
-            
-            try:
-                if self.vad: self.vad.set_mode('speaking')
-                
-                if os.path.exists(filepath):
-                    interrupted_by = self._play_with_bargein(filepath)
-                    
-                    try: os.remove(filepath)
-                    except: pass
-                        
-                    if interrupted_by is not None:
-                        print("\n[!] User Interrupted (Speaking Phase).")
-                        self.stop_signal = True
-                        self.interruption_audio = interrupted_by
-                        self._drain_queue()
-                        break
-                else:
-                    print(f"[TTS Warning] Audio file not found, skipping playback")
-                    tts_failed_count += 1
-                    time.sleep(0.5)
-            finally:
-                if self.vad: self.vad.set_mode('listening')
-
-    def _play_with_bargein(self, file_path):
-        if not os.path.exists(file_path): return None
         try:
-            data, fs = sf.read(file_path, dtype='float32')
-        except: return None
+            async def _generate():
+                communicate = edge_tts.Communicate(text, EDGE_VOICE)
+                await communicate.save(output_path)
 
-        chunk_size = 1024
-        current_pos = 0
-        
-        with sd.OutputStream(samplerate=fs, channels=1) as stream:
-            with sd.InputStream(samplerate=16000, channels=1) as mic:
-                while current_pos < len(data):
-                    if self.stop_signal: return None
-                    
-                    chunk = data[current_pos : current_pos + chunk_size]
-                    if len(chunk) < chunk_size:
-                        chunk = np.pad(chunk, (0, chunk_size - len(chunk)))
-                    stream.write(chunk)
-                    current_pos += chunk_size
-                    
-                    if self.vad:
-                        mic_data, _ = mic.read(512)
-                        mic_chunk = mic_data.flatten().astype(np.float32)
-                        if self.vad.is_speech_chunk(mic_chunk):
-                            mic_data_2, _ = mic.read(512)
-                            mic_chunk_2 = mic_data_2.flatten().astype(np.float32)
-                            if self.vad.is_speech_chunk(mic_chunk_2):
-                                return np.concatenate((mic_chunk, mic_chunk_2))
+            self._loop.run_until_complete(_generate())
+
+            if os.path.exists(output_path) and os.path.getsize(output_path) > 100:
+                logger.debug(f"edge-tts generated {os.path.getsize(output_path)}b")
+                return output_path
+
+        except Exception as e:
+            logger.warning(f"edge-tts synthesis failed: {e}")
+            # Try cleanup
+            try:
+                if os.path.exists(output_path):
+                    os.remove(output_path)
+            except OSError:
+                pass
+
         return None
 
-    def _listen_during_silence(self, duration=0.1):
-        if not self.vad: return None
+    def _synthesize_piper(self, text: str) -> str | None:
+        """Generate audio using Piper TTS (offline neural)."""
+        voice = self._get_piper_voice()
+        if not voice:
+            return None
+
+        timestamp = int(time.time() * 1000000)
+        output_path = str(self._temp_dir / f"tts_{timestamp}.wav")
+
         try:
-            with sd.InputStream(samplerate=16000, channels=1) as mic:
-                mic_data, _ = mic.read(int(16000 * duration))
-                flat_data = mic_data.flatten().astype(np.float32)
-                chunk_size = 512
-                for i in range(0, len(flat_data), chunk_size):
-                    chunk = flat_data[i:i+chunk_size]
-                    if len(chunk) == 512 and self.vad.is_speech_chunk(chunk):
-                        return flat_data
-        except: pass
+            # Piper outputs raw PCM, write to WAV
+            audio_bytes = io.BytesIO()
+            with wave.open(audio_bytes, 'wb') as wav_file:
+                wav_file.setnchannels(1)
+                wav_file.setsampwidth(2)  # 16-bit
+                wav_file.setframerate(voice.config.sample_rate)
+
+                for audio_chunk in voice.synthesize_stream_raw(text):
+                    wav_file.writeframes(audio_chunk)
+
+            with open(output_path, 'wb') as f:
+                f.write(audio_bytes.getvalue())
+
+            if os.path.exists(output_path) and os.path.getsize(output_path) > 100:
+                logger.debug(f"piper generated {os.path.getsize(output_path)}b")
+                return output_path
+
+        except Exception as e:
+            logger.warning(f"Piper synthesis failed: {e}")
+            try:
+                if os.path.exists(output_path):
+                    os.remove(output_path)
+            except OSError:
+                pass
+
         return None
 
-    def _drain_queue(self):
-        while not self.audio_queue.empty():
-            try:
-                item = self.audio_queue.get_nowait()
-                if item is None: continue
-                _, f = item
-                if os.path.exists(f): os.remove(f)
-            except: pass
+    def _play_audio(self, file_path: str) -> None:
+        """Play an audio file (MP3 or WAV) through speakers."""
+        try:
+            data, samplerate = sf.read(file_path, dtype='float32')
+            sd.play(data, samplerate=samplerate)
+            sd.wait()
+        except Exception as e:
+            logger.warning(f"Audio playback failed: {e}")

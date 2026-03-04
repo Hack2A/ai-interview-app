@@ -1,14 +1,25 @@
-import sys
 import logging
+import sys
+import time
+from typing import Generator
+
 from llama_cpp import Llama
+
 from config import settings
 from src.brain.prompt_manager import PromptManager
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("LLMEngine")
 
+MAX_RESPONSE_TOKENS = 500
+LLM_TEMPERATURE = 0.7
+STREAM_TIMEOUT_SECONDS = 30
+
+
 class LLMEngine:
-    def __init__(self, resume_text=None, rag_engine=None):
+    """Local LLM inference engine using llama.cpp."""
+
+    def __init__(self, resume_text: str | None = None, rag_engine=None) -> None:
         
         try:
             logger.info(f"Loading LLM from: {settings.LLM_MODEL_PATH}")
@@ -28,9 +39,11 @@ class LLMEngine:
 
         self.prompt_manager = PromptManager(resume_text=resume_text, rag_engine=rag_engine)
         self.history = []
+        self._is_first_call = True
 
 
-    def generate_stream(self, user_input, difficulty="Medium"):
+    def generate_stream(self, user_input: str, difficulty: str = "Medium") -> Generator[str, None, None]:
+        """Stream LLM response token-by-token, yielding sentence fragments."""
         
         self.history.append({"role": "user", "content": user_input})
         messages = self.prompt_manager.build_messages(self.history, difficulty)
@@ -40,10 +53,10 @@ class LLMEngine:
         try:
             stream = self.model.create_chat_completion(
                 messages=messages,
-                max_tokens=200,
-                temperature=0.7,
+                max_tokens=MAX_RESPONSE_TOKENS,
+                temperature=LLM_TEMPERATURE,
                 stop=["User:", "[INSTRUCTION]"],
-                stream=True 
+                stream=True,
             )
         except Exception as e:
             logger.error(f"LLM generation error: {e}")
@@ -54,8 +67,18 @@ class LLMEngine:
         full_response = ""
         token_count = 0
         
+        stream_start = time.time()
+        # First call is always slow (processing full system prompt), skip timeout
+        apply_timeout = not self._is_first_call
+        self._is_first_call = False
+
         try:
             for chunk in stream:
+                # Timeout guard (skip on first call)
+                if apply_timeout and time.time() - stream_start > STREAM_TIMEOUT_SECONDS:
+                    logger.warning(f"LLM stream timed out after {STREAM_TIMEOUT_SECONDS}s")
+                    break
+
                 if "content" in chunk["choices"][0]["delta"]:
                     token = chunk["choices"][0]["delta"]["content"]
                     buffer += token
@@ -78,10 +101,12 @@ class LLMEngine:
 
         
         self.history.append({"role": "assistant", "content": full_response})
-    
+
     @property
-    def llm(self):
+    def llm(self) -> Llama:
+        """Access the underlying Llama model."""
         return self.model
-    
-    def get_history(self):
+
+    def get_history(self) -> list[dict]:
+        """Return conversation history."""
         return self.history

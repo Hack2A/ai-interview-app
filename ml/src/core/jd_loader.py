@@ -77,15 +77,20 @@ class JDLoader:
             text = f.read()
         return " ".join(text.split())
     
-    def chunk_text(self, text, chunk_size=200):
+    def chunk_text(self, text, chunk_size=150, overlap=50):
+        """Split text into overlapping word-level chunks."""
         if not text:
             return []
         
         words = text.split()
         chunks = []
+        step = max(chunk_size - overlap, 1)
         
-        for i in range(0, len(words), chunk_size):
+        for i in range(0, len(words), step):
             chunk = " ".join(words[i:i + chunk_size])
-            chunks.append(chunk)
+            if chunk.strip():
+                chunks.append(chunk)
+            if i + chunk_size >= len(words):
+                break
         
         return chunks

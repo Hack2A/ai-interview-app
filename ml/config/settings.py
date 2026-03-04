@@ -15,8 +15,8 @@ N_THREADS = 8
 N_GPU_LAYERS = -1
 
 
-STT_MODEL_SIZE = "base.en"
-STT_DEVICE = "cpu"
+STT_MODEL_SIZE = "small.en"
+STT_DEVICE = "cuda"
 
 
 TTS_MODEL_NAME = "en_US-ryan-medium.onnx"

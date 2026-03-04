@@ -7,7 +7,9 @@ import logging
 logger = logging.getLogger("VoiceRecorder")
 
 class VoiceRecorder:
-    def __init__(self, sample_rate=16000):
+    """Voice Activity Detection recorder using Silero VAD."""
+
+    def __init__(self, sample_rate: int = 16000) -> None:
         self.sample_rate = sample_rate
         print("[VAD] Loading Silero VAD Model...")
         self.model, utils = torch.hub.load(
@@ -20,12 +22,14 @@ class VoiceRecorder:
         self.base_threshold = 0.5
         self.speaking_threshold = 0.85
         self.current_threshold = self.base_threshold
-    
-    def set_mode(self, mode):
+
+    def set_mode(self, mode: str) -> None:
+        """Switch VAD threshold between 'listening' and 'speaking' modes."""
         if mode == 'listening': self.current_threshold = self.base_threshold
         elif mode == 'speaking': self.current_threshold = self.speaking_threshold
 
-    def listen_and_record(self, prepend_audio=None, max_duration=120):
+    def listen_and_record(self, prepend_audio=None, max_duration: int = 120) -> np.ndarray:
+        """Record audio until speech ends (silence detected), return numpy array."""
         
         self.set_mode('listening') 
         
@@ -71,11 +75,12 @@ class VoiceRecorder:
             return np.concatenate(buffer)
         else:
             return np.array([], dtype=np.float32)
-    
-    def is_speech_chunk(self, audio_chunk):
+
+    def is_speech_chunk(self, audio_chunk: np.ndarray) -> bool:
+        """Check if a 512-sample audio chunk contains speech."""
         return self._check_speech(audio_chunk, threshold=0.6)
 
-    def _check_speech(self, audio_chunk, threshold):
+    def _check_speech(self, audio_chunk: np.ndarray, threshold: float) -> bool:
         if len(audio_chunk) != 512: 
             return False
         try:

@@ -24,8 +24,8 @@ class PromptManager:
         if resume_text:
             sanitized_resume = self._sanitize_text(resume_text, max_length=3000)
             self.system_persona += (
-                "\n\n⚠️ ABSOLUTE RULE: You must NEVER repeat, read, narrate, list, or summarize "
-                "any part of the resume below. ONLY use it to formulate questions. ⚠️\n\n"
+                "\n\n ABSOLUTE RULE: You must NEVER repeat, read, narrate, list, or summarize "
+                "any part of the resume below. ONLY use it to formulate questions. \n\n"
                 f"CANDIDATE'S RESUME (for reference only — DO NOT READ ALOUD):\n{sanitized_resume}\n\n"
                 "QUESTION RULES:\n"
                 "- Pick ONE project or skill and ask a DIRECT technical question about it.\n"

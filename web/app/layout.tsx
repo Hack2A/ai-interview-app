@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "BeaverAI - Your AI Companion",
-  description: "BeaverAI is your personal AI companion, ready to assist you with a variety of tasks and help you prepare for interviews.",
+  title: "Cryptrael Vault",
+  description: "Cryptrael Vault is a secure digital vault platform that combines end-to-end AES-256 encryption, SHA-256 integrity hashing, and blockchain-based audit logging to provide tamper-proof, zero-trust storage for sensitive digital assets.",
 };
 
 export default function RootLayout({

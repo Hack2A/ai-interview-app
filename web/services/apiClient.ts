@@ -4,32 +4,34 @@ import type {
 	AxiosResponse,
 	InternalAxiosRequestConfig,
 } from "axios";
-import { authService } from "./authService";
 
 // Create axios instance with base configuration
 const apiClient: AxiosInstance = axios.create({
 	baseURL: process.env.NEXT_PUBLIC_API_URL || "/api",
 	timeout: 120000, // 2 minutes timeout for file uploads and ML processing
+	withCredentials: true, // Send cookies with requests
 	headers: {
 		"Content-Type": "application/json",
 	},
 });
 
-// Request interceptor to add authorization token
+// Request interceptor to add authorization token from cookies
 apiClient.interceptors.request.use(
 	(config: InternalAxiosRequestConfig) => {
 		// Ensure headers object exists
 		config.headers = config.headers ?? {};
 
-		// Prefer authService.getToken() in case token management is centralized there
-		const token = authService?.getToken
-			? authService.getToken()
-			: localStorage.getItem("token");
+		// Get token from cookies
+		const token =
+			typeof window !== "undefined"
+				? document.cookie
+						.split("; ")
+						.find((row) => row.startsWith("token="))
+						?.split("=")[1]
+				: null;
 
 		// Add authorization header if token exists
 		if (token) {
-			// Some TS setups expect headers to be an object with string values
-			// We set the Authorization header directly
 			// @ts-ignore
 			config.headers.Authorization = `Bearer ${token}`;
 		}
@@ -49,10 +51,10 @@ apiClient.interceptors.response.use(
 	(error) => {
 		// Handle common error scenarios
 		if (error.response?.status === 401) {
-			// Unauthorized - clear token and redirect to login
-			localStorage.removeItem("token");
-			// Optionally redirect to login page
-			window.location.href = "/";
+			// Unauthorized - clear token cookie and redirect to login
+			document.cookie = "token=; path=/; max-age=0";
+			// Redirect to login page
+			window.location.href = "/login";
 		} else if (error.response?.status === 403) {
 			// Forbidden - handle as needed
 			console.error("Access forbidden");

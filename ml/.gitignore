@@ -1,27 +1,71 @@
-ml/models/
-ml/data/temp/
-ml/data/logs/
-ml/data/transcripts/
-ml/data/resumes/
+# ─── Python ───────────────────────────────────────────
 __pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+
+# ─── Virtual Environment ──────────────────────────────
 venv/
-.env
-*.pyc
-*.DS_Store
+.venv/
+env/
 
-beaverAI/ml/data/temp/
-beaverAI/ml/data/transcripts/
-beaverAI/ml/models/
+# ─── IDE / Editor ─────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
 
-**/data/temp/*
-**/data/transcripts/*
-**/data/cache/*
-**/models/llm/*
-**/models/tts/*
-
+# ─── ML Models (large binaries) ──────────────────────
 *.gguf
 *.bin
 *.pt
 *.onnx
-*.pdf
+*.onnx.json
+models/llm/
+models/tts/
+models/chromadb/
+
+# ─── Runtime Data ────────────────────────────────────
+data/temp/
+data/cache/
+data/logs/
+
+# ─── Reports & Transcripts ──────────────────────────
+data/transcripts/
+
+# ─── User Documents (PII - never commit) ─────────────
+data/resumes/
+data/job_descriptions/
+
+# ─── Test Artifacts ──────────────────────────────────
+test_output.log
 *.log
+.pytest_cache/
+htmlcov/
+.coverage
+coverage.xml
+
+# ─── Environment / Secrets ───────────────────────────
+.env
+.env.*
+*.pem
+*.key
+secrets.json
+credentials.json
+
+# ─── Audio temp files ────────────────────────────────
+*.wav
+*.mp3
+*.flac
+
+# ─── OS Generated ────────────────────────────────────
+*.tmp
+*.bak
+*.pdf

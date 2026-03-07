@@ -9,8 +9,12 @@ from config import settings
 
 logger = logging.getLogger("ProctoringMonitor")
 
+LOG_COOLDOWN_SECONDS = 5.0
+
 class ProctoringMonitor:
-    def __init__(self):
+    """Threaded webcam proctoring monitor with violation tracking."""
+
+    def __init__(self) -> None:
         self.engine = ProctoringEngine()
         self.is_running = False
         self.thread = None
@@ -21,9 +25,11 @@ class ProctoringMonitor:
         self.violation_counters = defaultdict(int)
         
         self.continuous_violation_tracker = {}
+        self._last_log_time: dict[str, float] = {}
         self.threshold_seconds = settings.VIOLATION_THRESHOLD_SECONDS
-    
-    def start(self):
+
+    def start(self) -> None:
+        """Start proctoring with user consent."""
         if self.is_running:
             return
         
@@ -147,12 +153,20 @@ class ProctoringMonitor:
         cv2.destroyAllWindows()
     
     def _log_violation(self, violation_type, duration, is_sustained=False):
+        now = time.time()
+
+        # Cooldown: skip logging if same type was logged within LOG_COOLDOWN_SECONDS
+        last_time = self._last_log_time.get(violation_type, 0)
+        if not is_sustained and (now - last_time) < LOG_COOLDOWN_SECONDS:
+            return
+
         with self._lock:
             self.violation_counters[violation_type] += 1
+            self._last_log_time[violation_type] = now
             
             log_entry = {
                 "type": violation_type,
-                "timestamp": time.time(),
+                "timestamp": now,
                 "duration": round(duration, 2),
                 "sustained": is_sustained
             }
@@ -161,42 +175,52 @@ class ProctoringMonitor:
         if is_sustained:
             logger.warning(f"Sustained violation: {violation_type} for {duration:.1f}s")
         else:
-            logger.info(f"Violation detected: {violation_type}")
+            logger.debug(f"Violation detected: {violation_type}")
     
-    def get_violations_summary(self):
+    def get_violations_summary(self) -> dict:
+        """Return summary of all violations with severity rating."""
         total_violations = sum(self.violation_counters.values())
-        
+
         severity = "low"
         if total_violations > 10:
             severity = "high"
         elif total_violations > 5:
             severity = "medium"
-        
+
         return {
             "total_violations": total_violations,
             "violation_counts": self.violation_counters.copy(),
             "violation_log": self.violation_log.copy(),
-            "severity": severity
+            "severity": severity,
         }
     
-    def stop(self):
+    def stop(self) -> None:
+        """Stop the proctoring monitor and release resources."""
         if not self.is_running:
             return
-        
+
         self.is_running = False
-        
-        if self.thread:
-            self.thread.join(timeout=2)
-        
-        if self.cap:
-            try:
+
+        try:
+            if self.thread:
+                self.thread.join(timeout=3)
+        except (KeyboardInterrupt, OSError):
+            pass
+
+        try:
+            if self.cap:
                 self.cap.release()
-            except:
-                pass
-        
+        except (cv2.error, OSError) as e:
+            logger.warning(f"Failed to release webcam: {e}")
+
         try:
             self.engine.cleanup()
-        except:
+        except (AttributeError, RuntimeError) as e:
+            logger.warning(f"Failed to cleanup proctoring engine: {e}")
+
+        try:
+            cv2.destroyAllWindows()
+        except Exception:
             pass
-        
+
         logger.info("Proctoring monitor stopped")

@@ -6,20 +6,23 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("STTEngine")
 
 class STTEngine:
-    def __init__(self):
+    """Speech-to-Text engine using Faster Whisper."""
+
+    def __init__(self) -> None:
         logger.info(f"Loading Whisper model: {settings.STT_MODEL_SIZE}...")
         try:
             self.model = WhisperModel(
                 settings.STT_MODEL_SIZE, 
                 device=settings.STT_DEVICE, 
-                compute_type="int8"
+                compute_type="float16" if settings.STT_DEVICE == "cuda" else "int8"
             )
             logger.info("Whisper Loaded Successfully.")
         except Exception as e:
             logger.error(f"Failed to load Whisper: {e}")
             raise e
 
-    def transcribe(self, audio_path, language=None):
+    def transcribe(self, audio_path: str, language: str | None = None) -> tuple[str, str]:
+        """Transcribe audio file and return (text, detected_language)."""
         MAX_AUDIO_SIZE = 25 * 1024 * 1024
         ALLOWED_EXTENSIONS = {'.wav', '.mp3', '.flac', '.m4a', '.ogg'}
         

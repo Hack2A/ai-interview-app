@@ -6,44 +6,44 @@ const features = [
     {
         icon: (
             <svg className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
         ),
-        title: "End-to-End AES-256 Encryption",
-        description: "Military-grade encryption ensures your data is protected at rest and in transit. Zero-knowledge architecture means only you hold the keys to your vault."
+        title: "Resume Upload & ATS Score",
+        description: "Upload your resume and get instant ATS (Applicant Tracking System) score analysis. Identify areas for improvement and optimize your resume to pass through automated screening systems."
     },
     {
         icon: (
             <svg className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
             </svg>
         ),
-        title: "Blockchain-Based Integrity Verification",
-        description: "Every file upload generates a cryptographic hash stored on an immutable blockchain ledger, providing tamper-proof verification and complete data provenance."
+        title: "Diverse Interview Types",
+        description: "Practice with technical, HR, behavioral, JavaScript-based, and skill-specific interviews. Choose from pre-built options or get a curated interview experience tailored to your specific needs and target role."
     },
     {
         icon: (
             <svg className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
             </svg>
         ),
-        title: "Zero-Trust Access Control",
-        description: "Granular permission management with multi-factor authentication, biometric verification, and role-based access policies. Trust nothing, verify everything."
+        title: "Flexible Interview Modes",
+        description: "Choose your comfort level: practice with audio-only interviews or enable video sharing for a more realistic experience. AI conducts intelligent, context-aware interviews that adapt to your responses."
     },
     {
         icon: (
             <svg className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
         ),
-        title: "Immutable Audit Trails",
-        description: "Comprehensive logging of all access events with cryptographic timestamps. Meet compliance requirements with SOC 2, GDPR, and HIPAA-ready audit capabilities."
+        title: "Detailed Interview Analytics",
+        description: "Get comprehensive post-interview summaries with performance insights. Download detailed reports, review transcripts anytime, and track your progress across multiple practice sessions to improve continuously."
     }
 ];
 
 export default function WhyChooseUs() {
     return (
-        <section className="relative py-24 bg-[#0F172A]">
+        <section className="relative py-24 bg-white">
             <div className="max-w-7xl mx-auto px-6">
                 {/* Section Header */}
                 <motion.div
@@ -53,11 +53,11 @@ export default function WhyChooseUs() {
                     transition={{ duration: 0.6 }}
                     className="text-center mb-16"
                 >
-                    <h2 className="text-4xl lg:text-5xl font-bold text-[#F1F5F9] mb-4">
-                        Why Choose Cryptrael Vault?
+                    <h2 className="text-4xl lg:text-5xl font-bold text-[#1E293B] mb-4">
+                        Why Choose BeaverAI?
                     </h2>
-                    <p className="text-xl text-[#94A3B8] max-w-2xl mx-auto">
-                        Enterprise-grade security built on cryptographic foundations and blockchain immutability
+                    <p className="text-xl text-[#475569] max-w-2xl mx-auto">
+                        AI-powered interview preparation with comprehensive features to help you ace your next interview
                     </p>
                 </motion.div>
 
@@ -74,21 +74,21 @@ export default function WhyChooseUs() {
                             className="group relative"
                         >
                             {/* Card */}
-                            <div className="relative h-full p-8 bg-linear-to-br from-[#1E293B]/60 to-[#1E293B]/30 backdrop-blur-xl rounded-2xl border border-[#7C3AED]/20 hover:border-[#7C3AED]/50 transition-all duration-300 shadow-lg hover:shadow-2xl hover:shadow-[#7C3AED]/10">
+                            <div className="relative h-full p-8 bg-white border border-[#E2E8F0] hover:border-blue-200 rounded-2xl hover:shadow-xl hover:shadow-blue-100/50 transition-all duration-300">
                                 {/* Glow effect on hover */}
-                                <div className="absolute inset-0 rounded-2xl bg-linear-to-br from-[#7C3AED]/0 to-[#10B981]/0 group-hover:from-[#7C3AED]/5 group-hover:to-[#10B981]/5 transition-all duration-300"></div>
+                                <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-blue-50/0 to-indigo-50/0 group-hover:from-blue-50/50 group-hover:to-indigo-50/50 transition-all duration-300"></div>
 
                                 <div className="relative z-10">
                                     {/* Icon */}
-                                    <div className="inline-flex items-center justify-center w-16 h-16 mb-6 bg-linear-to-br from-[#5B21B6] to-[#7C3AED] rounded-xl text-white shadow-lg shadow-[#7C3AED]/30 group-hover:shadow-[#7C3AED]/50 transition-all duration-300">
+                                    <div className="inline-flex items-center justify-center w-16 h-16 mb-6 bg-gradient-to-br from-[#3B82F6] to-[#2563EB] rounded-xl text-white shadow-lg shadow-blue-500/30 group-hover:shadow-blue-500/50 transition-all duration-300">
                                         {feature.icon}
                                     </div>
 
                                     {/* Content */}
-                                    <h3 className="text-2xl font-bold text-[#F1F5F9] mb-4">
+                                    <h3 className="text-2xl font-bold text-[#1E293B] mb-4">
                                         {feature.title}
                                     </h3>
-                                    <p className="text-[#94A3B8] leading-relaxed">
+                                    <p className="text-[#475569] leading-relaxed">
                                         {feature.description}
                                     </p>
                                 </div>

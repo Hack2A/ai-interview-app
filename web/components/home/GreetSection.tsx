@@ -1,8 +1,14 @@
 "use client";
 
 import review from "@/components/assets/review-home.svg";
+import { navigate } from "@/lib/navigation";
 
 export default function GreetSection() {
+
+    const handleStartNewInterview = () => {
+        navigate("/interview/new");
+    }
+
     return (
         <section className="basis-2/5 shrink-0 flex w-[90%] mx-auto justify-center items-center px-20 py-5">
             {/* Left Written Section */}
@@ -19,13 +25,14 @@ export default function GreetSection() {
                         Last Interview Report
                     </button>
                     <span className="text-gray-400 font-medium">or</span>
-                    <button className="px-6 py-3 bg-blue-200 text-blue-900 rounded-lg font-semibold hover:bg-blue-300 transition-colors duration-200 cursor-pointer">
+                    <button className="px-6 py-3 bg-blue-200 text-blue-900 rounded-lg font-semibold hover:bg-blue-300 transition-colors duration-200 cursor-pointer"
+                        onClick={handleStartNewInterview}>
                         Start New Interview
                     </button>
                 </div>
             </div>
             {/* Right Image Section */}
-            <div className="w-[35%] h-full flex items-start justify-center">
+            <div className="w-[45%] h-full flex items-start justify-center pr-20">
                 <img src={review.src} alt="Review Illustration" className="w-full h-full object-cover" />
             </div>
         </section>

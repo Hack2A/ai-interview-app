@@ -8,7 +8,7 @@ function ProtectedContent({ children }: { children: React.ReactNode }) {
 
     return (
         <div
-            className={`h-screenflex flex-col bg-linear-to-br ${showNavbar ? "pt-17" : ""}`}
+            className={`h-screenflex flex-col bg-linear-to-br`}
         >
             {showNavbar && (
                 <ProtectedNavbar />

@@ -116,7 +116,7 @@ class TestResumeLoader:
         from src.core.resume_loader import ResumeLoader
         loader = ResumeLoader()
         with pytest.raises(ValueError):
-            loader._load_pdf(Path("../../etc/passwd.pdf"))
+            loader.load_from_path(Path("../../etc/passwd.pdf"))
 
 
 class TestJDLoader:

@@ -1,0 +1,4037 @@
+
+
+=== FILE: .env ===
+
+
+=== FILE: main.py ===
+from src.core.interview_manager import InterviewManager
+
+def main():
+    print(" Booting up BeaverAI Core...")
+    app = InterviewManager()
+    app.start_session()
+
+if __name__ == "__main__":
+    main()
+
+=== FILE: orchestrator.py ===
+"""BeaverAI ML Orchestrator — unified API for backend integration.
+
+This is the SINGLE ENTRY POINT for the backend to access all ML functionalities.
+Import this module and use the BeaverAIOrchestrator class.
+
+Usage:
+    from orchestrator import BeaverAIOrchestrator
+
+    api = BeaverAIOrchestrator()
+    api.load_documents()
+
+    # ATS Analysis
+    result = api.analyze_resume()
+
+    # Interview (with mode and type)
+    api.new_session(difficulty="Medium", interview_mode="curated", interview_type="behavioral")
+    api.start_interview(difficulty="Medium", enable_proctoring=True)
+
+    # Transcription
+    text = api.transcribe_audio("path/to/audio.wav")
+
+    # TTS
+    api.speak("Hello, welcome to the interview.")
+
+    # Evaluation
+    report = api.generate_report()
+"""
+import json
+import logging
+import os
+from pathlib import Path
+from typing import Generator
+
+from config import settings
+
+logger = logging.getLogger("BeaverAI")
+
+
+class BeaverAIOrchestrator:
+    """Unified API for all BeaverAI ML functionalities.
+
+    Exposes clean methods for:
+    - Document loading (resume, JD)
+    - ATS resume analysis (algorithmic + LLM)
+    - Interview management (LLM chat, streaming)
+    - Speech-to-Text (Whisper transcription)
+    - Text-to-Speech (edge-tts + piper)
+    - RAG (retrieval-augmented generation)
+    - Proctoring (webcam monitoring)
+    - Evaluation (post-interview reports)
+    - Sentiment analysis
+    - Cache management
+    """
+
+    def __init__(self, lazy_load: bool = True) -> None:
+        """Initialize orchestrator.
+
+        Args:
+            lazy_load: If True, engines are loaded on first use (faster startup).
+                       If False, all engines load immediately.
+        """
+        self._interview_mode: str = "generic"
+        self._interview_type: str = "technical"
+        self._resume_text: str | None = None
+        self._jd_text: str | None = None
+
+        # Lazy-loaded engine refs
+        self._llm_engine = None
+        self._stt_engine = None
+        self._tts_engine = None
+        self._rag_engine = None
+        self._ats_checker = None
+        self._evaluator = None
+        self._proctoring = None
+        self._sentiment = None
+        self._session = None
+
+        if not lazy_load:
+            self.load_documents()
+            _ = self.llm
+            _ = self.stt
+            _ = self.tts
+
+        logger.info("BeaverAI Orchestrator initialized")
+
+    # ── Document Loading ──────────────────────────────────────────
+
+    def load_documents(self) -> dict:
+        """Load resume and job description from data directories.
+
+        Returns:
+            dict with 'resume' and 'jd' keys (text or None).
+        """
+        from src.core.resume_loader import ResumeLoader
+        from src.core.jd_loader import JDLoader
+
+        self._resume_text = ResumeLoader().load_resume()
+        jd_loader = JDLoader()
+        self._jd_text = jd_loader.load_jd()
+
+        # Index JD in RAG if available
+        if self._jd_text:
+            self.rag.index_jd(self._jd_text)
+
+        return {
+            "resume": self._resume_text,
+            "jd": self._jd_text,
+            "resume_loaded": self._resume_text is not None,
+            "jd_loaded": self._jd_text is not None,
+        }
+
+    def load_resume_from_text(self, text: str) -> None:
+        """Load resume from raw text (e.g., from API upload)."""
+        self._resume_text = text
+
+    def load_jd_from_text(self, text: str) -> None:
+        """Load job description from raw text and index in RAG."""
+        self._jd_text = text
+        if text:
+            self.rag.index_jd(text)
+
+    def load_jd_from_file(self, file_path: str) -> dict:
+        """Load job description from a file path (PDF or TXT).
+
+        Args:
+            file_path: Path to a .pdf or .txt JD file.
+
+        Returns:
+            dict with 'jd' text and 'jd_loaded' bool.
+        """
+        from src.core.jd_loader import JDLoader
+        loader = JDLoader()
+        jd_text = loader.load_from_path(file_path)
+        if jd_text:
+            self._jd_text = jd_text
+            self.rag.index_jd(jd_text)
+        return {"jd": self._jd_text, "jd_loaded": self._jd_text is not None}
+
+    @property
+    def resume_text(self) -> str | None:
+        return self._resume_text
+
+    @property
+    def jd_text(self) -> str | None:
+        return self._jd_text
+
+    # ── Lazy Properties (engines loaded on first access) ──────────
+
+    @property
+    def llm(self):
+        """LLM engine for chat/interview."""
+        if self._llm_engine is None:
+            from src.brain.llm_engine import LLMEngine
+            self._llm_engine = LLMEngine(
+                resume_text=self._resume_text,
+                rag_engine=self._rag_engine,
+                interview_type=self._interview_type,
+            )
+        return self._llm_engine
+
+    @property
+    def stt(self):
+        """Speech-to-Text engine (Whisper)."""
+        if self._stt_engine is None:
+            from src.ears.stt_engine import STTEngine
+            self._stt_engine = STTEngine()
+        return self._stt_engine
+
+    @property
+    def tts(self):
+        """Text-to-Speech engine (edge-tts + piper)."""
+        if self._tts_engine is None:
+            from src.voice.tts_engine import TTSEngine
+            self._tts_engine = TTSEngine()
+        return self._tts_engine
+
+    @property
+    def rag(self):
+        """RAG engine for JD context retrieval."""
+        if self._rag_engine is None:
+            from src.brain.rag_engine import RAGEngine
+            self._rag_engine = RAGEngine()
+        return self._rag_engine
+
+    @property
+    def ats(self):
+        """ATS resume checker."""
+        if self._ats_checker is None:
+            from src.core.ats_checker import ATSChecker
+            llm_model = self.llm.llm if self._llm_engine else None
+            self._ats_checker = ATSChecker(llm_model=llm_model)
+        return self._ats_checker
+
+    @property
+    def evaluator(self):
+        """Post-interview evaluator."""
+        if self._evaluator is None:
+            from src.brain.evaluator import Evaluator
+            self._evaluator = Evaluator(model_path=settings.LLM_MODEL_PATH)
+        return self._evaluator
+
+    @property
+    def proctoring(self):
+        """Webcam proctoring monitor."""
+        if self._proctoring is None:
+            from src.eyes.proctoring_monitor import ProctoringMonitor
+            self._proctoring = ProctoringMonitor()
+        return self._proctoring
+
+    @property
+    def sentiment(self):
+        """Sentiment & emotion analyzer."""
+        if self._sentiment is None:
+            from src.ears.sentiment_analyzer import SentimentAnalyzer
+            self._sentiment = SentimentAnalyzer()
+        return self._sentiment
+
+    @property
+    def session(self):
+        """Current interview session state."""
+        if self._session is None:
+            from src.core.session_state import SessionState
+            self._session = SessionState()
+        return self._session
+
+    # ── ATS Analysis ──────────────────────────────────────────────
+
+    def analyze_resume(self, resume_text: str | None = None,
+                       jd_text: str | None = None) -> dict:
+        """Run full ATS analysis (algorithmic + LLM + spelling + formatting).
+
+        Args:
+            resume_text: Override resume text (uses loaded if None).
+            jd_text: Override JD text (uses loaded if None).
+
+        Returns:
+            dict with algorithmic_score, llm_score, combined_score, etc.
+        """
+        resume = resume_text or self._resume_text
+        jd = jd_text or self._jd_text
+
+        if not resume or not jd:
+            return {"error": "Both resume and JD required for ATS analysis"}
+
+        return self.ats.analyze(resume, jd)
+
+    # ── LLM Chat ──────────────────────────────────────────────────
+
+    def chat(self, user_input: str,
+             difficulty: str = "Medium") -> str:
+        """Send a message to the LLM and get a full response (non-streaming).
+
+        Args:
+            user_input: User's message text.
+            difficulty: Interview difficulty level.
+
+        Returns:
+            Full LLM response as string.
+        """
+        chunks = list(self.llm.generate_stream(user_input, difficulty))
+        return " ".join(chunks).strip()
+
+    def chat_stream(self, user_input: str,
+                    difficulty: str = "Medium") -> Generator[str, None, None]:
+        """Stream LLM response token-by-token.
+
+        Args:
+            user_input: User's message text.
+            difficulty: Interview difficulty level.
+
+        Yields:
+            Sentence fragments as they are generated.
+        """
+        yield from self.llm.generate_stream(user_input, difficulty)
+
+    def get_opening_question(self, difficulty: str = "Medium") -> str:
+        """Generate the first interview question based on resume/JD context.
+
+        Returns:
+            Opening question text.
+        """
+        prompt = self.llm.prompt_manager.get_opening_prompt(difficulty)
+        return self.chat(prompt, difficulty)
+
+    def get_chat_history(self) -> list[dict]:
+        """Return current conversation history."""
+        return self.llm.get_history()
+
+    def reset_chat(self) -> None:
+        """Clear conversation history and create a new session."""
+        if self._llm_engine:
+            self._llm_engine.history = []
+            self._llm_engine._is_first_call = True
+        self._session = None
+
+    # ── Speech-to-Text ────────────────────────────────────────────
+
+    def transcribe_audio(self, audio_path: str,
+                         language: str | None = None) -> dict:
+        """Transcribe an audio file to text.
+
+        Args:
+            audio_path: Path to audio file (wav, mp3, flac, m4a, ogg).
+            language: Force language (None = auto-detect).
+
+        Returns:
+            dict with 'text' and 'language' keys.
+        """
+        text, lang = self.stt.transcribe(audio_path, language)
+        return {"text": text, "language": lang}
+
+    # ── Text-to-Speech ────────────────────────────────────────────
+
+    def speak(self, text: str) -> None:
+        """Synthesize and play text as speech."""
+        self.tts.speak_text(text)
+
+    def synthesize_audio(self, text: str) -> str | None:
+        """Synthesize text to an audio file (returns file path, no playback).
+
+        Args:
+            text: Text to synthesize.
+
+        Returns:
+            Path to generated audio file, or None on failure.
+        """
+        audio_path = self.tts._synthesize_edge(text)
+        if not audio_path:
+            audio_path = self.tts._synthesize_piper(text)
+        return audio_path
+
+    # ── RAG ───────────────────────────────────────────────────────
+
+    def query_jd(self, query: str, top_k: int = 5) -> list[str]:
+        """Query the JD index for relevant context.
+
+        Args:
+            query: Search query text.
+            top_k: Number of results to return.
+
+        Returns:
+            List of relevant JD text chunks.
+        """
+        return self.rag.query_jd(query, top_k=top_k)
+
+    def index_jd(self, jd_text: str) -> None:
+        """Index a job description for RAG retrieval."""
+        self._jd_text = jd_text
+        self.rag.index_jd(jd_text)
+
+    # ── Evaluation ────────────────────────────────────────────────
+
+    def generate_report(self, history: list[dict] | None = None) -> dict:
+        """Generate a post-interview evaluation report.
+
+        Args:
+            history: Chat history to evaluate (uses current if None).
+
+        Returns:
+            dict with score, mistakes, suggestions, domain_rating, swot_analysis.
+        """
+        chat_history = history or self.get_chat_history()
+        return self.evaluator.generate_report(chat_history)
+
+    # ── Proctoring ────────────────────────────────────────────────
+
+    def start_proctoring(self) -> bool:
+        """Start webcam proctoring. Returns True on success."""
+        try:
+            return self.proctoring.start()
+        except Exception as e:
+            logger.error(f"Proctoring failed to start: {e}")
+            return False
+
+    def stop_proctoring(self) -> dict:
+        """Stop proctoring and return violation summary."""
+        summary = self.proctoring.get_violations_summary()
+        self.proctoring.stop()
+        return summary
+
+    # ── Sentiment Analysis ────────────────────────────────────────
+
+    def analyze_sentiment(self, audio_path: str) -> dict:
+        """Analyze emotion from audio file.
+
+        Returns:
+            dict with 'emotion' and 'confidence' keys.
+        """
+        return self.sentiment.analyze_emotion(audio_path)
+
+    def detect_fillers(self, text: str) -> dict:
+        """Detect filler words in text.
+
+        Returns:
+            dict with 'fillers' list and 'count'.
+        """
+        fillers = self.sentiment.detect_fillers(text)
+        return {"fillers": fillers, "count": len(fillers)}
+
+    # ── Toxicity ──────────────────────────────────────────────────
+
+    _PROFANITY_WORDS = frozenset([
+        "fuck", "shit", "bitch", "ass", "damn", "bastard", "dick",
+        "asshole", "crap", "piss", "slut", "whore", "cunt", "stfu",
+        "motherfucker", "bullshit", "dumbass", "idiot", "stupid",
+    ])
+
+    def check_toxicity(self, text: str) -> dict:
+        """Check text for profanity/toxicity.
+
+        Returns:
+            dict with 'is_toxic' bool and 'matched_words' list.
+        """
+        words = set(text.lower().split())
+        matched = words & self._PROFANITY_WORDS
+        return {"is_toxic": bool(matched), "matched_words": list(matched)}
+
+    # ── Session Management ────────────────────────────────────────
+
+    def new_session(self, difficulty: str = "Medium",
+                    interview_mode: str = "generic",
+                    interview_type: str = "technical") -> dict:
+        """Create a new interview session.
+
+        Args:
+            difficulty: Easy, Medium, Hard, or Extreme.
+            interview_mode: 'generic' or 'curated'.
+            interview_type: 'technical', 'behavioral', 'hr', or 'combined'.
+
+        Returns:
+            Session metadata dict.
+        """
+        from src.core.session_state import SessionState
+        self._interview_mode = interview_mode
+        self._interview_type = interview_type
+        self._session = SessionState(
+            difficulty=difficulty,
+            interview_mode=interview_mode,
+            interview_type=interview_type,
+        )
+        # Reset LLM engine to pick up new interview type
+        self._llm_engine = None
+        return self._session.to_dict()
+
+    def get_session_info(self) -> dict:
+        """Get current session metadata."""
+        return self.session.to_dict()
+
+    # ── Cache ─────────────────────────────────────────────────────
+
+    def clear_cache(self) -> None:
+        """Clear all ML caches (embeddings, LLM results)."""
+        from src.core.cache_manager import get_cache_manager
+        get_cache_manager().clear_cache()
+
+    # ── Full Interview Flow (convenience) ─────────────────────────
+
+    def run_interactive_interview(self) -> None:
+        """Run the full interactive CLI interview (existing terminal flow).
+
+        This is a convenience method that delegates to InterviewManager.
+        For backend APIs, use the individual methods above instead.
+        """
+        from src.core.interview_manager import InterviewManager
+        InterviewManager().start_session()
+
+    # ── Health Check ──────────────────────────────────────────────
+
+    def health_check(self) -> dict:
+        """Check which ML components are available.
+
+        Returns:
+            dict with component availability booleans.
+        """
+        checks = {
+            "resume_loaded": self._resume_text is not None,
+            "jd_loaded": self._jd_text is not None,
+            "llm_ready": self._llm_engine is not None,
+            "stt_ready": self._stt_engine is not None,
+            "tts_ready": self._tts_engine is not None,
+            "rag_ready": self._rag_engine is not None,
+            "models_dir_exists": settings.MODELS_DIR.exists(),
+            "llm_model_exists": settings.LLM_MODEL_PATH.exists(),
+            "tts_model_exists": settings.TTS_MODEL_PATH.exists(),
+        }
+        checks["all_ready"] = all(checks.values())
+        return checks
+ERROR reading e:\ai_interview\ai-interview-app\ml\pytest_out.txt: 'utf-8' codec can't decode byte 0xff in position 0: invalid start byte
+
+
+=== FILE: pytest_out_utf8.txt ===
+﻿============================= test session starts =============================
+platform win32 -- Python 3.11.9, pytest-9.0.2, pluggy-1.6.0
+rootdir: E:\ai_interview\ai-interview-app\ml
+plugins: anyio-4.12.1
+collected 4 items / 1 error
+
+=================================== ERRORS ====================================
+_______________ ERROR collecting tests/test_ats_logic_mocked.py _______________
+tests\test_ats_logic_mocked.py:41: in <module>
+    assert "skill_gaps" in res
+E   AssertionError: assert 'skill_gaps' in {'algorithmic_score': np.float64(16.67), 'combined_score': np.float64(16.67), 'experience_score': 0.0, 'formatting': {... (20 words ù aim for 300-600)'], 'score_penalty': 6, 'sections_found': ['experience', 'skills', 'projects'], ...}, ...}
+------------------------------- Captured stdout -------------------------------
+--- ANALYSIS RESULT ---
+algorithmic_score: 16.67
+llm_score: None
+combined_score: 16.67
+tfidf_score: 9.94
+semantic_score: 32.45000076293945
+skill_match_score: 40.0
+experience_score: 0.0
+keyword_match_score: 50.0
+spelling: {'error_count': 3, 'errors': ['experience', 'years', 'built'], 'score_penalty': 3}
+formatting: {'issues': ['No email address detected', 'No phone number detected', 'Resume too short (20 words ù aim for 300-600)'], 'issue_count': 3, 'score_penalty': 6, 'word_count': 20, 'sections_found': ['experience', 'skills', 'projects']}
+missing_skills: ['react', 'api', 'fastapi']
+matched_skills: ['python', 'docker']
+suggestions: ['Consider adding these skills: react, api, fastapi']
+match_score: 16.67
+=========================== short test summary info ===========================
+ERROR tests/test_ats_logic_mocked.py - AssertionError: assert 'skill_gaps' in...
+!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+============================== 1 error in 11.54s ==============================
+ERROR reading e:\ai_interview\ai-interview-app\ml\requirements.txt: 'utf-8' codec can't decode byte 0xff in position 0: invalid start byte
+
+
+=== FILE: config\settings.py ===
+import os
+from pathlib import Path
+
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+MODELS_DIR = BASE_DIR / "models"
+TRANSCRIPTS_DIR = BASE_DIR / "data" / "transcripts"
+
+
+LLM_MODEL_NAME = "Meta-Llama-3-8B-Instruct-Q4_K_M.gguf" 
+LLM_MODEL_PATH = MODELS_DIR / "llm" / LLM_MODEL_NAME
+
+CONTEXT_SIZE = 4096
+N_THREADS = 8
+N_GPU_LAYERS = -1
+
+
+STT_MODEL_SIZE = "small.en"
+STT_DEVICE = "cuda"
+
+
+TTS_MODEL_NAME = "en_US-ryan-medium.onnx"
+TTS_MODEL_PATH = MODELS_DIR / "tts" / "en" / "en_US" / "ryan" / "medium" / TTS_MODEL_NAME
+
+ENABLE_RAG = True
+ENABLE_PROCTORING = True
+ENABLE_SENTIMENT = True
+ENABLE_ATS = True
+
+JD_DIR = BASE_DIR / "data" / "job_descriptions"
+CHROMADB_DIR = MODELS_DIR / "chromadb"
+EMOTION_MODEL_NAME = "ehcalabres/wav2vec2-lg-xlsr-en-speech-emotion-recognition"
+
+PROCTORING_FPS = 5
+VIOLATION_THRESHOLD_SECONDS = 2  
+
+FILLER_WORDS = ["umm", "uh", "like", "you know", "so", "basically", "actually"]
+
+USE_ADVANCED_TTS = False
+DEFAULT_INTERVIEW_LANGUAGE = "en"
+VOICE_CLONE_SAMPLE = MODELS_DIR / "voice_samples" / "interviewer.wav"
+
+
+=== FILE: config\__init__.py ===
+
+
+=== FILE: scripts\download_models.py ===
+import subprocess
+import sys
+from pathlib import Path
+
+print("="*60)
+print("     BEAVERAI - MODEL DOWNLOADER")
+print("="*60)
+
+print("\n[1/4] Downloading spaCy English model...")
+try:
+    subprocess.run(["python", "-m", "spacy", "download", "en_core_web_sm"], check=True)
+except subprocess.CalledProcessError as e:
+    print(f"✗ Failed to download spaCy model: {e}")
+    sys.exit(1)
+
+print("\n[2/4] Downloading sentence-transformers model...")
+try:
+    from sentence_transformers import SentenceTransformer
+    print("Loading sentence-transformers/all-MiniLM-L6-v2...")
+    model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
+    print("✓ Sentence transformer model downloaded")
+except Exception as e:
+    print(f"✗ Failed to download sentence-transformers: {e}")
+
+print("\n[3/4] Downloading emotion recognition model...")
+try:
+    from transformers import Wav2Vec2ForSequenceClassification, Wav2Vec2FeatureExtractor
+    model_name = "ehcalabres/wav2vec2-lg-xlsr-en-speech-emotion-recognition"
+    print(f"Loading {model_name}...")
+    feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(model_name)
+    model = Wav2Vec2ForSequenceClassification.from_pretrained(model_name)
+    print("✓ Emotion model downloaded")
+except Exception as e:
+    print(f"✗ Failed to download emotion model: {e}")
+
+print("\n[4/4] Downloading Coqui TTS model...")
+try:
+    from TTS.api import TTS
+    print("Loading tts_models/multilingual/multi-dataset/xtts_v2...")
+    tts = TTS("tts_models/multilingual/multi-dataset/xtts_v2")
+    print("✓ Coqui XTTS v2 downloaded")
+except Exception as e:
+    print(f"✗ Failed to download Coqui TTS: {e}")
+    print("  (Will fallback to pyttsx3)")
+
+print("\n" + "="*60)
+print("Model download complete!")
+print("="*60)
+print("\nNote: ChromaDB and MediaPipe models will be downloaded")
+print("automatically on first use.")
+
+=== FILE: scripts\quantize_model.py ===
+
+
+=== FILE: src\__init__.py ===
+
+
+=== FILE: src\brain\evaluator.py ===
+import json
+import logging
+from pathlib import Path
+
+from llama_cpp import Llama
+
+from config import settings
+
+logger = logging.getLogger("Evaluator")
+
+MAX_EVAL_TOKENS = 800
+EVAL_TEMPERATURE = 0.1
+EVAL_CONTEXT_SIZE = 4096
+
+class Evaluator:
+    """Generates post-interview evaluation reports using the LLM."""
+
+    def __init__(self, model_path: str | Path) -> None:
+        self.model_path = model_path
+        self.llm: Llama | None = None
+    
+    def _ensure_llm_loaded(self) -> None:
+        if self.llm is None:
+            self.llm = Llama(
+                model_path=str(self.model_path),
+                n_ctx=EVAL_CONTEXT_SIZE,
+                verbose=False,
+            )
+
+    def generate_report(self, history: list[dict]) -> dict:
+        """Generate a structured evaluation report from interview history."""
+        logger.info("Generating Final Evaluation Report...")
+        
+        if len(history) < 1:
+            return {
+                "score": 0,
+                "mistakes": ["Interview was terminated too early."],
+                "suggestions": ["Please complete a full session for analysis."],
+                "domain_rating": {"hr": -1, "technical": -1, "communication": -1},
+                "swot_analysis": {
+                    "strengths": ["Insufficient data"],
+                    "weaknesses": ["Interview incomplete"],
+                    "opportunities": ["Complete full interview for detailed analysis"],
+                    "threats": ["Unable to assess"]
+                }
+            }
+
+        self._ensure_llm_loaded()
+
+        prompt = (
+            "You are a strict Senior Technical Hiring Manager. Analyze the interview transcript below.\n"
+            "RULES:\n"
+            "1. If a topic (HR, Technical, Communication) was NOT discussed, set its rating to -1.\n"
+            "2. If the candidate gave short, lazy, or refusal answers (e.g., 'I am not ready'), score them 0.\n"
+            "3. Do not hallucinate. Only evaluate what is explicitly in the text.\n"
+            "4. Output strictly valid JSON.\n\n"
+            "Transcript:\n" + json.dumps(history) + "\n\n"
+            "Output Format:\n"
+            "{\n"
+            '  "score": (int 0-100, be harsh),\n'
+            '  "mistakes": [list of specific errors],\n'
+            '  "suggestions": [list of actionable advice],\n'
+            '  "domain_rating": {"hr": int, "technical": int, "communication": int},\n'
+            '  "swot_analysis": {\n'
+            '    "strengths": [list of 3-5 key strengths],\n'
+            '    "weaknesses": [list of 3-5 weaknesses],\n'
+            '    "opportunities": [list of 3-5 growth opportunities],\n'
+            '    "threats": [list of 3-5 potential concerns]\n'
+            '  }\n'
+            "}"
+        )
+
+        try:
+            output = self.llm.create_chat_completion(
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=MAX_EVAL_TOKENS,
+                temperature=EVAL_TEMPERATURE,
+                response_format={"type": "json_object"}
+            )
+            return json.loads(output['choices'][0]['message']['content'])
+        except Exception as e:
+            logger.error(f"Failed to generate evaluation: {e}", exc_info=True)
+            return {
+                "error": "LLM call failed",
+                "details": str(e),
+                "raw": None,
+                "score": 0,
+                "mistakes": ["Evaluation system error"],
+                "suggestions": ["Please try again"],
+                "domain_rating": {"hr": 0, "technical": 0, "communication": 0}
+            }
+
+=== FILE: src\brain\llm_engine.py ===
+import logging
+import sys
+import time
+from typing import Generator
+
+from llama_cpp import Llama
+
+from config import settings
+from src.brain.prompt_manager import PromptManager
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("LLMEngine")
+
+MAX_RESPONSE_TOKENS = 500
+LLM_TEMPERATURE = 0.7
+STREAM_TIMEOUT_SECONDS = 30
+
+
+class LLMEngine:
+    """Local LLM inference engine using llama.cpp."""
+
+    def __init__(self, resume_text: str | None = None, rag_engine=None,
+                 interview_type: str = "technical") -> None:
+        
+        try:
+            logger.info(f"Loading LLM from: {settings.LLM_MODEL_PATH}")
+            self.model = Llama(
+                model_path=str(settings.LLM_MODEL_PATH),
+                n_ctx=settings.CONTEXT_SIZE,
+                n_threads=settings.N_THREADS,
+                verbose=False,
+                chat_format="llama-3"
+            )
+            logger.info("LLM loaded successfully")
+        except Exception as e:
+            logger.error(f"CRITICAL ERROR: Failed to load LLM model: {e}")
+            logger.error(f"Model path: {settings.LLM_MODEL_PATH}")
+            logger.error("Please ensure the model file exists in the models/llm directory")
+            raise Exception(f"LLM initialization failed: {e}")
+
+        self.prompt_manager = PromptManager(
+            resume_text=resume_text, rag_engine=rag_engine,
+            interview_type=interview_type
+        )
+        self.history = []
+        self._is_first_call = True
+
+
+    def generate_stream(self, user_input: str, difficulty: str = "Medium") -> Generator[str, None, None]:
+        """Stream LLM response token-by-token, yielding sentence fragments."""
+        
+        self.history.append({"role": "user", "content": user_input})
+        messages = self.prompt_manager.build_messages(self.history, difficulty)
+
+        logger.info(f"Generating LLM response for: {user_input[:50]}...")
+        
+        try:
+            stream = self.model.create_chat_completion(
+                messages=messages,
+                max_tokens=MAX_RESPONSE_TOKENS,
+                temperature=LLM_TEMPERATURE,
+                stop=["User:", "[INSTRUCTION]"],
+                stream=True,
+            )
+        except Exception as e:
+            logger.error(f"LLM generation error: {e}")
+            yield "I apologize, I'm having technical difficulties. Could you please repeat that?"
+            return
+
+        buffer = ""
+        full_response = ""
+        token_count = 0
+        
+        stream_start = time.time()
+        # First call is always slow (processing full system prompt), skip timeout
+        apply_timeout = not self._is_first_call
+        self._is_first_call = False
+
+        try:
+            for chunk in stream:
+                # Timeout guard (skip on first call)
+                if apply_timeout and time.time() - stream_start > STREAM_TIMEOUT_SECONDS:
+                    logger.warning(f"LLM stream timed out after {STREAM_TIMEOUT_SECONDS}s")
+                    break
+
+                if "content" in chunk["choices"][0]["delta"]:
+                    token = chunk["choices"][0]["delta"]["content"]
+                    buffer += token
+                    full_response += token
+                    token_count += 1
+                    
+                    if any(x in token for x in [".", "?", "!", "\n"]):
+                        yield buffer
+                        buffer = ""
+        except Exception as e:
+            logger.error(f"Stream error: {e}", exc_info=True)
+            if buffer:
+                yield buffer
+                buffer = ""
+        
+        logger.info(f"Generated {token_count} tokens, {len(full_response)} characters")
+        
+        if buffer:
+            yield buffer
+
+        
+        self.history.append({"role": "assistant", "content": full_response})
+
+    @property
+    def llm(self) -> Llama:
+        """Access the underlying Llama model."""
+        return self.model
+
+    def get_history(self) -> list[dict]:
+        """Return conversation history."""
+        return self.history
+
+=== FILE: src\brain\prompt_manager.py ===
+import re
+
+
+class PromptManager:
+    """Manages system prompts, difficulty presets, and injection-safe message construction."""
+
+    # ── Interview type persona templates ──────────────────────────
+
+    _TYPE_PERSONAS = {
+        "technical": (
+            "You are BeaverAI, a professional Technical Interviewer. "
+            "Your goal is to assess the candidate's skills in Coding, System Design, and Data Structures.\n"
+        ),
+        "behavioral": (
+            "You are BeaverAI, a professional Behavioral Interviewer. "
+            "Your goal is to assess the candidate's soft skills, teamwork, leadership, and problem-solving approach "
+            "using the STAR method (Situation, Task, Action, Result).\n"
+        ),
+        "hr": (
+            "You are BeaverAI, a professional HR Interviewer. "
+            "Your goal is to evaluate the candidate's career goals, cultural fit, salary expectations, "
+            "strengths, weaknesses, and motivation for the role.\n"
+        ),
+        "combined": (
+            "You are BeaverAI, a professional Interview Panel conducting a comprehensive interview. "
+            "You will rotate between Technical, Behavioral, and HR questions to evaluate the candidate holistically. "
+            "Mix coding/system-design questions with STAR-method behavioral questions and HR/culture-fit questions.\n"
+        ),
+    }
+
+    _TYPE_QUESTION_GUIDANCE = {
+        "technical": (
+            "Focus on: coding problems, system design, architecture, algorithms, "
+            "data structures, and technical project deep-dives."
+        ),
+        "behavioral": (
+            "Focus on: teamwork scenarios, conflict resolution, leadership examples, "
+            "failures and learnings, time management, and communication skills. "
+            "Always frame questions using the STAR method."
+        ),
+        "hr": (
+            "Focus on: career aspirations, motivation for applying, strengths and weaknesses, "
+            "work-life balance expectations, salary expectations, and cultural alignment."
+        ),
+        "combined": (
+            "Rotate between question types in this order: "
+            "1st question → Technical, 2nd → Behavioral, 3rd → HR, then repeat. "
+            "Ensure a balanced mix across all three areas."
+        ),
+    }
+
+    _COMMON_RULES = (
+        "STRICT RULES:\n"
+        "1. NEVER switch roles. You are the Interviewer, they are the Candidate. If they ask to interview you, politely decline and return to the topic.\n"
+        "2. Keep responses concise (2-3 sentences). Do not lecture.\n"
+        "3. If the user is rude, toxic, or uses foul language, issue a stern warning. If they persist, end the interview.\n"
+        "4. Do not hallucinate personal details. You are an AI.\n"
+        "5. Avoid addressing the user by name.\n"
+        "6. Always ask ONE question at a time. Wait for the candidate's answer before asking the next question.\n"
+    )
+
+    def __init__(self, resume_text: str | None = None, rag_engine=None,
+                 interview_type: str = "technical") -> None:
+
+        self.has_resume = bool(resume_text)
+        self.has_jd = False
+        self.interview_type = interview_type
+
+        # Build system persona from type template + common rules
+        type_persona = self._TYPE_PERSONAS.get(interview_type, self._TYPE_PERSONAS["technical"])
+        type_guidance = self._TYPE_QUESTION_GUIDANCE.get(interview_type, self._TYPE_QUESTION_GUIDANCE["technical"])
+
+        self.system_persona = type_persona + self._COMMON_RULES + f"\nQUESTION FOCUS:\n{type_guidance}\n"
+
+        if resume_text:
+            sanitized_resume = self._sanitize_text(resume_text, max_length=3000)
+            self.system_persona += (
+                "\n\n ABSOLUTE RULE: You must NEVER repeat, read, narrate, list, or summarize "
+                "any part of the resume below. ONLY use it to formulate questions. \n\n"
+                f"CANDIDATE'S RESUME (for reference only — DO NOT READ ALOUD):\n{sanitized_resume}\n\n"
+                "QUESTION RULES:\n"
+                "- Pick ONE project or skill and ask a DIRECT question about it.\n"
+                "- Example: 'Tell me about the data pipeline you built for ReviewNexus.'\n"
+                "- BAD example: 'I see your resume lists Python, React, AWS...' (this is narrating!)\n"
+            )
+
+        self.rag_engine = rag_engine
+        if self.rag_engine:
+            jd_context = self._get_jd_context()
+            if jd_context:
+                self.has_jd = True
+                sanitized_jd = self._sanitize_text(jd_context, max_length=3000)
+                self.system_persona += (
+                    f"\nJOB DESCRIPTION REQUIREMENTS:\n{sanitized_jd}\n\n"
+                    "IMPORTANT: Tailor your questions to verify the candidate has the skills "
+                    "listed in this job description. Cross-reference their resume with job requirements.\n"
+                    "Ask about gaps between the resume and job description.\n"
+                )
+
+        self.difficulty_prompts = {
+            "Easy": "Ask basic concept questions. Be encouraging and supportive.",
+            "Medium": "Ask standard implementation and problem-solving questions.",
+            "Hard": "Ask complex system design and architecture questions. Probe deeper.",
+            "Extreme": "Ask deep architectural questions with edge cases. Be skeptical and challenging."
+        }
+
+    def _sanitize_text(self, text: str, max_length: int = 5000) -> str:
+        """Strip injection patterns and control characters from user text."""
+        if not text:
+            return ""
+        
+        text = text[:max_length]
+        
+        injection_patterns = [
+            r'(?i)(ignore|disregard|forget)\s+(all\s+)?(previous|prior|above)\s+(instructions?|prompts?|commands?)',
+            r'(?i)system\s*:',
+            r'(?i)assistant\s*:',
+            r'(?i)user\s*:',
+            r'(?i)you\s+are\s+now',
+            r'(?i)new\s+instructions?',
+            r'(?i)act\s+as',
+            r'(?i)pretend\s+to\s+be',
+            r'(?i)roleplay',
+        ]
+        
+        for pattern in injection_patterns:
+            text = re.sub(pattern, '[REDACTED]', text)
+        
+        control_chars = ''.join(chr(i) for i in range(32) if i not in [9, 10, 13])
+        text = text.translate(str.maketrans('', '', control_chars))
+        
+        return text.strip()
+
+    def _get_jd_context(self) -> str:
+        """Query RAG engine for comprehensive JD context."""
+        if not self.rag_engine:
+            return ""
+        
+        queries = [
+            "technical skills and technologies required",
+            "required experience and qualifications",
+            "key responsibilities and duties",
+            "education and certifications",
+            "team and project details",
+        ]
+        contexts = []
+        seen = set()
+        
+        for query in queries:
+            results = self.rag_engine.query_jd(query, top_k=2)
+            for chunk in results:
+                chunk_key = chunk[:100]
+                if chunk_key not in seen:
+                    seen.add(chunk_key)
+                    contexts.append(chunk)
+        
+        return "\n".join(contexts[:6]) if contexts else ""
+
+    def get_opening_prompt(self, difficulty: str = "Medium") -> str:
+        """Generate a prompt that forces the LLM to ask the first type-appropriate question."""
+        itype = self.interview_type
+
+        if itype == "behavioral":
+            if self.has_resume:
+                return (
+                    "Ask your FIRST behavioral interview question now. Pick ONE specific experience "
+                    "from the candidate's resume and ask a STAR-method question about it. "
+                    "For example: 'Tell me about a time you faced a challenge while working on [project].' "
+                    "Do NOT summarize the resume."
+                )
+            return "Ask a behavioral question about teamwork or a challenging work situation using the STAR method."
+
+        if itype == "hr":
+            return (
+                "Ask your FIRST HR question now. Start with something about the candidate's "
+                "career motivation or what drew them to this opportunity. Keep it warm and conversational."
+            )
+
+        if itype == "combined":
+            if self.has_resume:
+                return (
+                    "Ask your FIRST interview question now. Start with a TECHNICAL question. "
+                    "Pick ONE specific project or skill from the candidate's resume and ask a "
+                    "technical deep-dive question about it. Do NOT summarize the resume."
+                )
+            return "Ask a technical question to assess the candidate's core skills to start the interview."
+
+        # Default: technical
+        if self.has_resume:
+            return (
+                "Ask your FIRST interview question now. Pick ONE specific project or skill "
+                "from the candidate's resume and ask a technical question about it. "
+                "Do NOT summarize, list, or read out the resume — just ask the question directly."
+            )
+        elif self.has_jd:
+            return (
+                "Ask your FIRST interview question based on a key requirement "
+                "from the job description. Ask directly, do not summarize."
+            )
+        else:
+            return "Ask a technical question to assess the candidate's skills."
+
+    def build_messages(self, history: list[dict], difficulty: str = "Medium") -> list[dict]:
+        """Construct the message array for LLM chat completion."""
+       
+        messages = [{"role": "system", "content": self.system_persona}]
+        
+        difficulty_prompt = self.difficulty_prompts.get(difficulty, self.difficulty_prompts["Medium"])
+        messages.append({"role": "system", "content": difficulty_prompt})
+        
+        if history:
+            sanitized_history = []
+            for msg in history[-20:]:
+                sanitized_msg = {
+                    "role": msg.get("role", "user"),
+                    "content": self._sanitize_text(msg.get("content", ""), max_length=5000)
+                }
+                sanitized_history.append(sanitized_msg)
+            messages.extend(sanitized_history)
+            
+        
+        return messages
+
+
+=== FILE: src\brain\rag_engine.py ===
+"""Retrieval-Augmented Generation engine using ChromaDB for JD context."""
+import logging
+from typing import Optional
+
+import chromadb
+from sentence_transformers import SentenceTransformer
+
+from config import settings
+
+logger = logging.getLogger("RAGEngine")
+
+DEFAULT_CHUNK_SIZE = 150
+DEFAULT_CHUNK_OVERLAP = 50
+DEFAULT_TOP_K = 5
+
+
+class RAGEngine:
+    """Retrieval-Augmented Generation engine using ChromaDB for JD context."""
+
+    def __init__(self, jd_text: str | None = None) -> None:
+        self.embedding_model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
+
+        settings.CHROMADB_DIR.mkdir(parents=True, exist_ok=True)
+        self.client = chromadb.PersistentClient(path=str(settings.CHROMADB_DIR))
+        self.collection = self.client.get_or_create_collection(name="job_context")
+
+        # Always reindex when JD text is provided (ensures fresh data)
+        if jd_text:
+            self.reset_index()
+            self._index_jd(jd_text)
+
+    def _index_jd(self, jd_text: str) -> None:
+        """Chunk and embed JD text into ChromaDB with overlap."""
+        chunks = self._chunk_text(jd_text, chunk_size=DEFAULT_CHUNK_SIZE, overlap=DEFAULT_CHUNK_OVERLAP)
+        if not chunks:
+            return
+
+        embeddings = self.embedding_model.encode(chunks).tolist()
+        ids = [f"chunk_{i}" for i in range(len(chunks))]
+
+        self.collection.add(embeddings=embeddings, documents=chunks, ids=ids)
+        logger.info(f"Indexed {len(chunks)} JD chunks into ChromaDB (size={DEFAULT_CHUNK_SIZE}, overlap={DEFAULT_CHUNK_OVERLAP})")
+
+    def _chunk_text(self, text: str, chunk_size: int = 150, overlap: int = 50) -> list[str]:
+        """Split text into overlapping word-level chunks for better retrieval."""
+        if not text:
+            return []
+
+        words = text.split()
+        chunks = []
+        step = max(chunk_size - overlap, 1)
+
+        for i in range(0, len(words), step):
+            chunk = " ".join(words[i:i + chunk_size])
+            if chunk.strip():
+                chunks.append(chunk)
+            if i + chunk_size >= len(words):
+                break
+
+        return chunks
+
+    def query_jd(self, query_term: str, top_k: int = DEFAULT_TOP_K) -> list[str]:
+        """Query JD context for relevant chunks."""
+        if self.collection.count() == 0:
+            return []
+
+        query_embedding = self.embedding_model.encode([query_term]).tolist()
+
+        results = self.collection.query(
+            query_embeddings=query_embedding,
+            n_results=min(top_k, self.collection.count())
+        )
+
+        if results and results['documents']:
+            return results['documents'][0]
+        return []
+
+    def query_jd_multi(self, queries: list[str], top_k: int = 3) -> list[str]:
+        """Query with multiple terms and return deduplicated results."""
+        if self.collection.count() == 0:
+            return []
+
+        all_results = []
+        seen = set()
+
+        for query in queries:
+            results = self.query_jd(query, top_k=top_k)
+            for chunk in results:
+                chunk_key = chunk[:80]
+                if chunk_key not in seen:
+                    seen.add(chunk_key)
+                    all_results.append(chunk)
+
+        return all_results
+
+    def reset_index(self) -> None:
+        """Delete and recreate the JD collection."""
+        try:
+            self.client.delete_collection(name="job_context")
+        except (ValueError, Exception):
+            pass
+        self.collection = self.client.get_or_create_collection(name="job_context")
+        logger.info("Reset job_context collection")
+
+
+=== FILE: src\brain\__init__.py ===
+from src.brain.evaluator import Evaluator
+from src.brain.llm_engine import LLMEngine
+from src.brain.prompt_manager import PromptManager
+from src.brain.rag_engine import RAGEngine
+
+__all__ = ["Evaluator", "LLMEngine", "PromptManager", "RAGEngine"]
+
+
+=== FILE: src\core\ats_checker.py ===
+"""ATS Resume Checker — algorithmic + LLM-based resume analysis."""
+import json
+import logging
+import re
+from concurrent.futures import ThreadPoolExecutor
+from difflib import SequenceMatcher
+from functools import lru_cache
+from pathlib import Path
+
+import numpy as np
+import spacy
+import torch
+from sentence_transformers import SentenceTransformer
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+
+from src.core.cache_manager import get_cache_manager
+
+logger = logging.getLogger("ATSChecker")
+
+
+class ATSChecker:
+    """Analyzes resume against job description using both algorithmic and LLM scoring."""
+
+    def __init__(self, llm_model=None) -> None:
+        try:
+            self.nlp = spacy.load("en_core_web_sm")
+        except OSError as e:
+            raise RuntimeError(
+                "spaCy model 'en_core_web_sm' not found. "
+                "Please install it: python -m spacy download en_core_web_sm"
+            ) from e
+
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.semantic_model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2', device=device)
+        self.llm_model = llm_model
+        self.cache = get_cache_manager()
+
+        self.tech_skills = {
+            "python", "java", "javascript", "typescript", "c++", "c#", "ruby", "go", "rust", "swift",
+            "react", "angular", "vue", "node", "express", "django", "flask", "fastapi", "spring",
+            "aws", "azure", "gcp", "docker", "kubernetes", "jenkins", "terraform", "ansible",
+            "sql", "postgresql", "mysql", "mongodb", "redis", "elasticsearch", "cassandra",
+            "git", "github", "gitlab", "bitbucket", "jira", "confluence",
+            "api", "rest", "graphql", "grpc", "microservices", "serverless",
+            "machine learning", "deep learning", "nlp", "computer vision", "tensorflow",
+            "pytorch", "keras", "scikit-learn", "pandas", "numpy", "opencv",
+            "agile", "scrum", "cicd", "devops", "testing", "tdd", "junit", "pytest",
+            "html", "css", "sass", "webpack", "babel", "npm", "yarn",
+            "linux", "unix", "bash", "powershell", "windows", "macos",
+            "networking", "security", "encryption", "authentication", "oauth",
+            "data structures", "algorithms", "system design", "database design",
+            "ai", "artificial intelligence", "neural networks", "transformers",
+            "spark", "hadoop", "kafka", "airflow", "etl", "data engineering",
+        }
+
+    # ── Text Processing ───────────────────────────────────────────
+
+    def preprocess_text(self, text: str) -> str:
+        text = text.lower()
+        text = re.sub(r'[^\w\s]', ' ', text)
+        text = re.sub(r'\s+', ' ', text)
+        text = re.sub(r'\b(and|or|the|a|an|in|on|at|for|to|of|with|by)\b', ' ', text)
+        return ' '.join(text.split())
+
+    @lru_cache(maxsize=128)
+    def extract_skills(self, text: str) -> frozenset:
+        if not text:
+            return frozenset()
+        
+        try:
+            from src.core.skill_ontology import SkillOntology
+            ontology = SkillOntology()
+            skills_found = ontology.extract_skills(text)
+            # Use original skill name rather than standardized to match downstream expectations, or standardized if preferred
+            return frozenset([s["skill"] for s in skills_found])
+        except Exception as e:
+            logger.warning(f"Skill extraction failed, using fallback: {e}")
+            text_lower = text.lower()
+            return frozenset(skill for skill in self.tech_skills if skill in text_lower)
+
+    @lru_cache(maxsize=128)
+    def extract_keywords(self, text: str) -> frozenset:
+        if not text:
+            return frozenset()
+        processed = self.preprocess_text(text)
+        doc = self.nlp(processed)
+        keywords = set()
+        for token in doc:
+            if token.pos_ in ['NOUN', 'PROPN', 'ADJ'] and len(token.text) > 2:
+                keywords.add(token.text)
+        for chunk in doc.noun_chunks:
+            if len(chunk.text) > 3:
+                keywords.add(chunk.text.strip())
+        return frozenset(keywords)
+
+    # ── Similarity Scores ─────────────────────────────────────────
+
+    def get_cached_embedding(self, text: str):
+        cached = self.cache.get_embedding_cache(text)
+        if cached is not None:
+            return cached
+        embedding = self.semantic_model.encode(text, convert_to_tensor=False, show_progress_bar=False)
+        self.cache.set_embedding_cache(text, embedding)
+        return embedding
+
+    def calculate_tfidf_similarity(self, resume_text: str, jd_text: str) -> float:
+        if not resume_text or not jd_text:
+            return 0.0
+        vectorizer = TfidfVectorizer(max_features=500, ngram_range=(1, 2))
+        try:
+            tfidf_matrix = vectorizer.fit_transform([resume_text, jd_text])
+            similarity = cosine_similarity(tfidf_matrix[0:1], tfidf_matrix[1:2])[0][0]
+            return round(similarity * 100, 2)
+        except (ValueError, ZeroDivisionError):
+            return 0.0
+
+    def calculate_semantic_similarity(self, resume_parsed: dict, jd_parsed: dict) -> float:
+        """Compare specific sections (e.g. experience to responsibilities) rather than whole documents."""
+        # Use targeted sections for comparison
+        resume_target = resume_parsed.get("experience", "")
+        if len(resume_target.strip()) < 50:
+            resume_target = resume_parsed.get("summary", "")
+            
+        jd_target = jd_parsed.get("responsibilities", "") + " " + jd_parsed.get("requirements", "")
+        
+        if len(resume_target.strip()) < 50:
+            # Fall back to raw text comparison if parsing failed
+            resume_target = " ".join(resume_parsed.values())
+        if len(jd_target.strip()) < 50:
+            jd_target = " ".join(jd_parsed.values())
+
+        if not resume_target or not jd_target:
+            return 0.0
+
+        resume_sentences = [s.strip() for s in resume_target.split('.') if len(s.strip()) > 20]
+        jd_sentences = [s.strip() for s in jd_target.split('.') if len(s.strip()) > 20]
+        
+        if not resume_sentences or not jd_sentences:
+            return 0.0
+            
+        resume_embeddings = self.semantic_model.encode(
+            resume_sentences, batch_size=32, convert_to_tensor=False, show_progress_bar=False
+        )
+        jd_embeddings = self.semantic_model.encode(
+            jd_sentences, batch_size=32, convert_to_tensor=False, show_progress_bar=False
+        )
+        similarities = cosine_similarity(resume_embeddings, jd_embeddings)
+        max_similarities = np.max(similarities, axis=1)
+        return round(np.mean(max_similarities) * 100, 2)
+
+    def calculate_experience_score(self, resume_parsed: dict, jd_parsed: dict) -> float:
+        """Evaluate if the candidate's years of experience meet the JD requirements."""
+        resume_exp_str = resume_parsed.get("years_of_experience", "0")
+        jd_exp_str = jd_parsed.get("experience", "0")
+        
+        try:
+            res_match = re.search(r'\d+', str(resume_exp_str))
+            res_years = float(res_match.group()) if res_match else 0.0
+            
+            jd_match = re.search(r'\d+', str(jd_exp_str))
+            jd_years = float(jd_match.group()) if jd_match else 0.0
+            
+            if jd_years == 0:
+                return 100.0  # No specific requirement found, assume match
+                
+            if res_years >= jd_years:
+                return 100.0
+                
+            # Partial score if they have some experience
+            return min(100.0, max(0.0, (res_years / jd_years) * 100))
+        except Exception as e:
+            logger.warning(f"Error extracting experience: {e}")
+            return 50.0
+
+    def calculate_skill_match(self, resume_skills: frozenset, jd_skills: frozenset) -> float:
+        if not jd_skills:
+            return 0.0
+        matched = resume_skills.intersection(jd_skills)
+        return (len(matched) / len(jd_skills)) * 100
+
+    def calculate_keyword_match(self, resume_keywords: frozenset, jd_keywords: frozenset) -> float:
+        if not jd_keywords:
+            return 0.0
+        matched = resume_keywords.intersection(jd_keywords)
+        return (len(matched) / len(jd_keywords)) * 100
+
+    def fuzzy_match_score(self, resume_text: str, jd_text: str) -> float:
+        if not resume_text or not jd_text:
+            return 0.0
+        return SequenceMatcher(None, resume_text[:1000], jd_text[:1000]).ratio() * 100
+
+    # ── NEW: Spelling & Formatting Checks ─────────────────────────
+
+    def check_spelling(self, text: str) -> dict:
+        """Check for potential spelling errors using spaCy's vocabulary."""
+        if not text:
+            return {"error_count": 0, "errors": [], "score_penalty": 0}
+
+        doc = self.nlp(text)
+        errors = []
+        checked = set()
+
+        for token in doc:
+            word = token.text.lower()
+            if (
+                len(word) > 2
+                and word not in checked
+                and token.pos_ not in ['PROPN', 'NUM', 'PUNCT', 'SPACE', 'SYM', 'X']
+                and not token.is_stop
+                and not any(c.isdigit() for c in word)
+                and not word.startswith('@')
+                and not word.startswith('http')
+            ):
+                checked.add(word)
+                # spaCy's vocab check for potential misspellings
+                if not self.nlp.vocab.has_vector(word) and word not in self.tech_skills:
+                    if not re.match(r'^[A-Z]{2,}$', token.text):  # Skip acronyms
+                        errors.append(word)
+
+        error_count = len(errors)
+        # Penalize: -1 point per error, max -15
+        score_penalty = min(error_count * 1, 15)
+
+        return {
+            "error_count": error_count,
+            "errors": errors[:20],  # Show top 20
+            "score_penalty": score_penalty,
+        }
+
+    def check_formatting(self, text: str) -> dict:
+        """Check resume formatting quality heuristics."""
+        if not text:
+            return {"issues": [], "score_penalty": 0}
+
+        issues = []
+
+        # Check for section headers (common resume sections)
+        section_keywords = ["experience", "education", "skills", "projects", "summary", "objective", "certifications"]
+        found_sections = [kw for kw in section_keywords if kw in text.lower()]
+        if len(found_sections) < 3:
+            issues.append(f"Missing standard sections (found {len(found_sections)}/7: {', '.join(found_sections)})")
+
+        # Check for bullet consistency
+        bullet_patterns = [r'•', r'[-–—]', r'\*', r'►', r'▪']
+        bullet_types_found = sum(1 for p in bullet_patterns if re.search(p, text))
+        if bullet_types_found > 2:
+            issues.append(f"Inconsistent bullet styles ({bullet_types_found} different types detected)")
+
+        # Check for ALL CAPS abuse
+        words = text.split()
+        caps_words = [w for w in words if w.isupper() and len(w) > 3]
+        caps_ratio = len(caps_words) / max(len(words), 1)
+        if caps_ratio > 0.15:
+            issues.append(f"Excessive ALL CAPS ({len(caps_words)} words, {caps_ratio:.0%} of text)")
+
+        # Check for extremely long paragraphs (no line breaks)
+        lines = text.split('\n')
+        long_lines = [l for l in lines if len(l) > 500]
+        if long_lines:
+            issues.append(f"Wall of text detected ({len(long_lines)} lines over 500 chars — add more line breaks)")
+
+        # Check for contact info presence
+        has_email = bool(re.search(r'[\w.+-]+@[\w-]+\.[\w.]+', text))
+        has_phone = bool(re.search(r'[\+]?[\d\s\-()]{10,}', text))
+        if not has_email:
+            issues.append("No email address detected")
+        if not has_phone:
+            issues.append("No phone number detected")
+
+        # Check word count
+        word_count = len(words)
+        if word_count < 100:
+            issues.append(f"Resume too short ({word_count} words — aim for 300-600)")
+        elif word_count > 1200:
+            issues.append(f"Resume too long ({word_count} words — keep under 1000 for ATS)")
+
+        score_penalty = min(len(issues) * 2, 15)
+
+        return {
+            "issues": issues,
+            "issue_count": len(issues),
+            "score_penalty": score_penalty,
+            "word_count": word_count if words else 0,
+            "sections_found": found_sections,
+        }
+
+    # ── LLM Intelligent Score ─────────────────────────────────────
+
+    def llm_intelligent_score(self, resume_parsed: dict, jd_parsed: dict) -> dict | None:
+        if not self.llm_model or not resume_parsed or not jd_parsed:
+            return None
+
+        # We'll use raw text fallback for cache key to ensure consistency
+        resume_text = " ".join(str(v) for v in resume_parsed.values())
+        jd_text = " ".join(str(v) for v in jd_parsed.values())
+        
+        cached_result = self.cache.get_llm_cache(resume_text, jd_text)
+        if cached_result:
+            return cached_result
+
+        try:
+            prompt = f"""You are an expert ATS (Applicant Tracking System) and recruitment specialist. Analyze how well this resume matches the job description.
+
+JOB DESCRIPTION:
+Requirements: {str(jd_parsed.get('requirements', ''))[:1000]}
+Responsibilities: {str(jd_parsed.get('responsibilities', ''))[:1000]}
+Experience: {str(jd_parsed.get('experience', ''))[:500]}
+
+RESUME:
+Summary: {str(resume_parsed.get('summary', ''))[:500]}
+Experience: {str(resume_parsed.get('experience', ''))[:1500]}
+Skills: {str(resume_parsed.get('skills', ''))[:1000]}
+Education: {str(resume_parsed.get('education', ''))[:500]}
+
+Provide a detailed analysis in JSON format with:
+1. match_score: A score from 0-100 indicating overall match quality, strictly evaluating required experience and core skills.
+2. strengths: List of 3-5 key strengths where the candidate matches well.
+3. gaps: List of 3-5 areas where the candidate could improve or is missing requirements (e.g. skill gaps, lack of years of experience).
+4. reasoning: Brief explanation of the score, focusing on role fit and impact.
+
+Respond ONLY with valid JSON, no other text."""
+
+            logger.info("Generating LLM intelligent score...")
+
+            response = self.llm_model.create_completion(
+                prompt=prompt,
+                max_tokens=800,
+                temperature=0.3,
+                stop=["</s>", "USER:", "ASSISTANT:"]
+            )
+
+            response_text = response['choices'][0]['text'].strip()
+
+            json_match = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', response_text, re.DOTALL)
+            if json_match:
+                json_str = json_match.group()
+                try:
+                    result = json.loads(json_str)
+                    llm_result = {
+                        "llm_score": float(result.get("match_score", 0)),
+                        "strengths": result.get("strengths", []),
+                        "gaps": result.get("gaps", []),
+                        "reasoning": result.get("reasoning", ""),
+                    }
+                    self.cache.set_llm_cache(resume_text, jd_text, llm_result)
+                    return llm_result
+                except (json.JSONDecodeError, ValueError) as e:
+                    logger.warning(f"LLM JSON parse error: {e}")
+        except Exception as e:
+            logger.error(f"LLM scoring failed: {e}")
+
+        return None
+
+    # ── Gap Analysis ──────────────────────────────────────────────
+
+    def gap_analysis(self, resume_keywords, jd_keywords, resume_skills, jd_skills) -> dict:
+        missing_skills = list(jd_skills - resume_skills)
+        matched_skills = list(resume_skills.intersection(jd_skills))
+
+        suggestions = []
+        if missing_skills:
+            suggestions.append(f"Consider adding these skills: {', '.join(missing_skills[:5])}")
+
+        return {
+            "missing_skills": missing_skills,
+            "matched_skills": matched_skills,
+            "suggestions": suggestions,
+        }
+
+    # ── Main Analysis ─────────────────────────────────────────────
+
+    def analyze(self, resume_input, jd_input) -> dict:
+        """Run full ATS analysis — algorithmic + LLM + spelling + formatting."""
+
+        # 1. Parse Inputs safely
+        if hasattr(resume_input, 'raw_text'):
+            resume_text = resume_input.raw_text
+            resume_parsed = resume_input.parsed_sections
+        else:
+            resume_text = str(resume_input)
+            from src.core.resume_parser import ResumeParser
+            resume_parsed = ResumeParser().parse(resume_text)
+            
+        jd_text = str(jd_input)
+        from src.core.jd_parser import jd_parser
+        jd_parsed = jd_parser.parse(jd_text)
+
+        # Phase 1: Extract features in parallel
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            future_kw_resume = executor.submit(self.extract_keywords, resume_text)
+            future_kw_jd = executor.submit(self.extract_keywords, jd_text)
+            future_sk_resume = executor.submit(self.extract_skills, resume_text)
+            future_sk_jd = executor.submit(self.extract_skills, jd_text)
+
+            resume_keywords = future_kw_resume.result()
+            jd_keywords = future_kw_jd.result()
+            resume_skills = future_sk_resume.result()
+            jd_skills = future_sk_jd.result()
+
+        # Phase 2: Calculate scores in parallel
+        futures = {}
+        with ThreadPoolExecutor(max_workers=6) as executor:
+            futures['tfidf'] = executor.submit(self.calculate_tfidf_similarity, resume_text, jd_text)
+            futures['semantic'] = executor.submit(self.calculate_semantic_similarity, resume_parsed, jd_parsed)
+            futures['experience'] = executor.submit(self.calculate_experience_score, resume_parsed, jd_parsed)
+            futures['skill'] = executor.submit(self.calculate_skill_match, resume_skills, jd_skills)
+            futures['keyword'] = executor.submit(self.calculate_keyword_match, resume_keywords, jd_keywords)
+            futures['fuzzy'] = executor.submit(self.fuzzy_match_score, resume_text, jd_text)
+            futures['spelling'] = executor.submit(self.check_spelling, resume_text)
+            futures['formatting'] = executor.submit(self.check_formatting, resume_text)
+
+            tfidf_score = futures['tfidf'].result()
+            semantic_score = futures['semantic'].result()
+            experience_score = futures['experience'].result()
+            skill_match_score = futures['skill'].result()
+            keyword_match_score = futures['keyword'].result()
+            fuzzy_score = futures['fuzzy'].result()
+            spelling_result = futures['spelling'].result()
+            formatting_result = futures['formatting'].result()
+
+        # Algorithmic score (weighted average, then apply quality penalties)
+        raw_algo_score = (
+            semantic_score * 0.35
+            + skill_match_score * 0.20
+            + experience_score * 0.15
+            + tfidf_score * 0.20
+            + keyword_match_score * 0.05
+            + fuzzy_score * 0.05
+        )
+        algo_score = max(0, raw_algo_score - spelling_result["score_penalty"] - formatting_result["score_penalty"])
+
+        # Gap analysis
+        gap_info = self.gap_analysis(resume_keywords, jd_keywords, resume_skills, jd_skills)
+
+        # LLM analysis
+        llm_analysis = self.llm_intelligent_score(resume_parsed, jd_parsed)
+        llm_score = llm_analysis["llm_score"] if llm_analysis and "llm_score" in llm_analysis else None
+
+        # Combined score (weighted fusion)
+        if llm_score is not None:
+            # 60% LLM (more reliable for actual fit) / 40% Algorithmic (good for strict keyword matching)
+            combined_score = round((algo_score * 0.4) + (float(llm_score) * 0.6), 2)
+        else:
+            combined_score = round(algo_score, 2)
+
+        result = {
+            # Scores
+            "algorithmic_score": round(algo_score, 2),
+            "llm_score": llm_score,
+            "combined_score": combined_score,
+            # Sub-scores
+            "tfidf_score": tfidf_score,
+            "semantic_score": semantic_score,
+            "skill_match_score": round(skill_match_score, 2),
+            "experience_score": round(experience_score, 2),
+            "keyword_match_score": round(keyword_match_score, 2),
+            # Quality checks
+            "spelling": spelling_result,
+            "formatting": formatting_result,
+            # Skills
+            "missing_skills": gap_info["missing_skills"],
+            "matched_skills": gap_info["matched_skills"],
+            "suggestions": gap_info["suggestions"],
+            # Legacy field
+            "match_score": combined_score,
+        }
+
+        if llm_analysis:
+            result["llm_strengths"] = llm_analysis["strengths"]
+            result["llm_gaps"] = llm_analysis["gaps"]
+            result["llm_reasoning"] = llm_analysis["reasoning"]
+
+        return result
+
+
+=== FILE: src\core\cache_manager.py ===
+import hashlib
+import json
+import logging
+import threading
+import time
+from pathlib import Path
+from typing import Any, Optional
+
+import numpy as np
+
+from config import settings
+
+logger = logging.getLogger("CacheManager")
+
+DEFAULT_CACHE_TTL = 86400  # 24 hours
+
+
+class CacheManager:
+    """Thread-safe, TTL-based cache for embeddings and LLM results."""
+
+    def __init__(self, cache_dir: str | Path | None = None) -> None:
+        self.cache_dir = Path(cache_dir) if cache_dir else settings.BASE_DIR / "data" / "cache"
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        self.embedding_cache: dict[str, dict] = {}
+        self.llm_cache: dict[str, dict] = {}
+        self.cache_ttl = DEFAULT_CACHE_TTL
+        self._lock = threading.RLock()
+
+    def _hash_content(self, content: str) -> str:
+        return hashlib.sha256(content.encode('utf-8')).hexdigest()
+
+    def get_embedding_cache(self, text: str) -> Optional[np.ndarray]:
+        """Retrieve cached embedding for text, or None if expired/missing."""
+        cache_key = self._hash_content(text)
+
+        with self._lock:
+            if cache_key in self.embedding_cache:
+                cached_data = self.embedding_cache[cache_key]
+                if time.time() - cached_data['timestamp'] < self.cache_ttl:
+                    return cached_data['embedding']
+                del self.embedding_cache[cache_key]
+
+        cache_file = self.cache_dir / f"emb_{cache_key}.json"
+        if cache_file.exists():
+            try:
+                with open(cache_file, 'r') as f:
+                    data = json.load(f)
+                    if time.time() - data['timestamp'] < self.cache_ttl:
+                        embedding = np.array(data['embedding'])
+                        with self._lock:
+                            self.embedding_cache[cache_key] = {
+                                'embedding': embedding,
+                                'timestamp': data['timestamp'],
+                            }
+                        return embedding
+            except (json.JSONDecodeError, KeyError, FileNotFoundError, OSError):
+                logger.debug(f"Failed to read embedding cache file: {cache_file}")
+        return None
+
+    def set_embedding_cache(self, text: str, embedding: Any) -> None:
+        """Store embedding in memory and disk cache."""
+        cache_key = self._hash_content(text)
+        embedding_array = embedding if isinstance(embedding, np.ndarray) else np.array(embedding)
+        embedding_list = embedding_array.tolist()
+
+        with self._lock:
+            self.embedding_cache[cache_key] = {
+                'embedding': embedding_array,
+                'timestamp': time.time(),
+            }
+
+        cache_file = self.cache_dir / f"emb_{cache_key}.json"
+        try:
+            with open(cache_file, 'w') as f:
+                json.dump({'embedding': embedding_list, 'timestamp': time.time()}, f)
+        except (OSError, IOError) as e:
+            logger.warning(f"Failed to write embedding cache: {e}")
+
+    def get_llm_cache(self, resume_text: str, jd_text: str) -> Optional[dict]:
+        """Retrieve cached LLM result for resume+JD pair."""
+        cache_key = self._hash_content(
+            f"{self._hash_content(resume_text)}:{self._hash_content(jd_text)}"
+        )
+
+        with self._lock:
+            if cache_key in self.llm_cache:
+                cached_data = self.llm_cache[cache_key]
+                if time.time() - cached_data['timestamp'] < self.cache_ttl:
+                    return cached_data['result']
+                del self.llm_cache[cache_key]
+
+        cache_file = self.cache_dir / f"llm_{cache_key}.json"
+        if cache_file.exists():
+            try:
+                with open(cache_file, 'r') as f:
+                    data = json.load(f)
+                    if time.time() - data['timestamp'] < self.cache_ttl:
+                        with self._lock:
+                            self.llm_cache[cache_key] = data
+                        return data['result']
+            except (json.JSONDecodeError, KeyError, FileNotFoundError, OSError):
+                logger.debug(f"Failed to read LLM cache file: {cache_file}")
+        return None
+
+    def set_llm_cache(self, resume_text: str, jd_text: str, result: dict) -> None:
+        """Store LLM result in memory and disk cache."""
+        cache_key = self._hash_content(
+            f"{self._hash_content(resume_text)}:{self._hash_content(jd_text)}"
+        )
+
+        cache_data = {'result': result, 'timestamp': time.time()}
+        with self._lock:
+            self.llm_cache[cache_key] = cache_data
+
+        cache_file = self.cache_dir / f"llm_{cache_key}.json"
+        try:
+            with open(cache_file, 'w') as f:
+                json.dump(cache_data, f)
+        except (OSError, IOError) as e:
+            logger.warning(f"Failed to write LLM cache: {e}")
+
+    def clear_cache(self) -> None:
+        """Clear all in-memory and disk caches."""
+        with self._lock:
+            self.embedding_cache.clear()
+            self.llm_cache.clear()
+        for cache_file in self.cache_dir.glob("*.json"):
+            try:
+                cache_file.unlink()
+            except (OSError, PermissionError) as e:
+                logger.warning(f"Failed to delete cache file {cache_file}: {e}")
+
+
+_global_cache: Optional[CacheManager] = None
+_cache_lock = threading.Lock()
+
+
+def get_cache_manager() -> CacheManager:
+    """Return singleton CacheManager instance."""
+    global _global_cache
+    if _global_cache is None:
+        with _cache_lock:
+            if _global_cache is None:
+                _global_cache = CacheManager()
+    return _global_cache
+
+
+=== FILE: src\core\interview_manager.py ===
+"""Interview Manager — orchestrates audio, LLM, TTS, proctoring, and evaluation."""
+import json
+import logging
+import time
+from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
+
+import numpy as np
+import soundfile as sf
+
+from config import settings
+from src.brain.evaluator import Evaluator
+from src.brain.llm_engine import LLMEngine
+from src.brain.rag_engine import RAGEngine
+from src.core.ats_checker import ATSChecker
+from src.core.jd_loader import JDLoader
+from src.core.resume_loader import ResumeLoader
+from src.core.session_state import SessionState
+from src.ears.stt_engine import STTEngine
+from src.ears.vad import VoiceRecorder
+from src.voice.tts_engine import TTSEngine
+
+logger = logging.getLogger("InterviewManager")
+
+_proctoring_available = False
+if settings.ENABLE_PROCTORING:
+    try:
+        from src.eyes.proctoring_monitor import ProctoringMonitor
+        _proctoring_available = True
+    except ImportError:
+        pass
+
+_coqui_available = False
+if settings.USE_ADVANCED_TTS:
+    try:
+        from src.voice.tts_coqui import CoquiTTSEngine
+        _coqui_available = True
+    except ImportError:
+        pass
+
+
+class InterviewManager:
+    """Orchestrates the full interview pipeline: audio capture, LLM, TTS, proctoring, and evaluation."""
+
+    def __init__(self) -> None:
+        logger.info("Initializing BeaverAI Engines...")
+        self.state = SessionState()
+
+        self.resume_loader = ResumeLoader()
+        self.resume_text = self.resume_loader.load_resume()
+
+        # JD loading is deferred until curated mode is selected
+        self.jd_loader = JDLoader() if settings.ENABLE_RAG else None
+        self.jd_text = None
+
+        self._sentiment_analyzer = None
+        self._proctoring = None
+        self._ats_checker = None
+
+        # Pre-init audio engines (these don't depend on interview config)
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            future_ears = executor.submit(STTEngine)
+            future_recorder = executor.submit(VoiceRecorder)
+            self.ears = future_ears.result()
+            self.recorder = future_recorder.result()
+
+        if settings.USE_ADVANCED_TTS and _coqui_available:
+            try:
+                self.voice_engine = CoquiTTSEngine()
+                logger.info("Using Coqui XTTS v2")
+            except (ImportError, RuntimeError, OSError) as e:
+                logger.warning(f"Coqui TTS failed ({e}), falling back to pyttsx3")
+                self.voice_engine = TTSEngine(vad_module=self.recorder)
+        else:
+            self.voice_engine = TTSEngine(vad_module=self.recorder)
+
+        # LLM, RAG, and evaluator are initialized after session config
+        self.brain = None
+        self.rag_engine = None
+        self.evaluator = None
+
+        self.next_turn_audio = None
+        self.audio_responses = []
+        self.detected_language = settings.DEFAULT_INTERVIEW_LANGUAGE
+        self._toxicity_warnings = 0
+        self._max_toxicity_warnings = 2
+
+    # ── Toxicity Detection ────────────────────────────────────────
+
+    _PROFANITY_WORDS = frozenset([
+        "fuck", "shit", "bitch", "ass", "damn", "bastard", "dick",
+        "asshole", "crap", "piss", "slut", "whore", "cunt", "stfu",
+        "motherfucker", "bullshit", "dumbass", "idiot", "stupid",
+    ])
+
+    def _is_toxic(self, text: str) -> bool:
+        """Check if user input contains profanity or hostile language."""
+        words = set(text.lower().split())
+        return bool(words & self._PROFANITY_WORDS)
+
+    # ── Lazy Properties ───────────────────────────────────────────
+
+    @property
+    def sentiment_analyzer(self):
+        if self._sentiment_analyzer is None and settings.ENABLE_SENTIMENT:
+            from src.ears.sentiment_analyzer import SentimentAnalyzer
+            self._sentiment_analyzer = SentimentAnalyzer()
+        return self._sentiment_analyzer
+
+    @property
+    def proctoring(self):
+        if self._proctoring is None and settings.ENABLE_PROCTORING and _proctoring_available:
+            self._proctoring = ProctoringMonitor()
+        return self._proctoring
+
+    @proctoring.setter
+    def proctoring(self, value):
+        self._proctoring = value
+
+    @property
+    def ats_checker(self):
+        if self._ats_checker is None and settings.ENABLE_ATS:
+            llm = self.brain.llm if self.brain else None
+            self._ats_checker = ATSChecker(llm_model=llm)
+        return self._ats_checker
+
+    # ── ATS Check ─────────────────────────────────────────────────
+
+    def _run_ats_check(self, resume_text: str, jd_text: str):
+        if not self.ats_checker or not resume_text or not jd_text:
+            return True
+
+        print("\n" + "=" * 60)
+        print("            ATS RESUME ANALYSIS")
+        print("=" * 60)
+        print("Analyzing resume against job description...\n")
+
+        ats_report = self.ats_checker.analyze(resume_text, jd_text)
+
+        # ── Algorithmic Score ──
+        print("┌─────────────────────────────────────────┐")
+        print(f"│  📊 Algorithmic ATS Score:  {ats_report['algorithmic_score']:>5.1f}%      │")
+        print("├─────────────────────────────────────────┤")
+        print(f"│  TF-IDF Similarity:     {ats_report['tfidf_score']:>6.1f}%         │")
+        print(f"│  Semantic Similarity:   {ats_report['semantic_score']:>6.1f}%         │")
+        print(f"│  Skill Match:           {ats_report['skill_match_score']:>6.1f}%         │")
+        print(f"│  Keyword Match:         {ats_report['keyword_match_score']:>6.1f}%         │")
+        print("└─────────────────────────────────────────┘")
+
+        # ── Spelling & Formatting ──
+        spelling = ats_report.get("spelling", {})
+        formatting = ats_report.get("formatting", {})
+
+        if spelling.get("error_count", 0) > 0:
+            print(f"\n⚠️  Spelling Issues ({spelling['error_count']} found):")
+            for err in spelling["errors"][:10]:
+                print(f"   • \"{err}\"")
+            print(f"   Penalty: -{spelling['score_penalty']} points")
+
+        if formatting.get("issues"):
+            print(f"\n⚠️  Formatting Issues ({formatting['issue_count']} found):")
+            for issue in formatting["issues"]:
+                print(f"   • {issue}")
+            print(f"   Penalty: -{formatting['score_penalty']} points")
+
+        # ── LLM Score ──
+        if ats_report.get("llm_score") is not None:
+            print("\n┌─────────────────────────────────────────┐")
+            print(f"│  🤖 AI Intelligent Score:   {ats_report['llm_score']:>5.1f}%      │")
+            print("└─────────────────────────────────────────┘")
+            print(f"\n  Reasoning: {ats_report.get('llm_reasoning', 'N/A')}")
+
+            if ats_report.get('llm_strengths'):
+                print("\n  ✅ Key Strengths (AI Analysis):")
+                for s in ats_report['llm_strengths'][:5]:
+                    print(f"     + {s}")
+
+            if ats_report.get('llm_gaps'):
+                print("\n  ❌ Areas for Improvement (AI Analysis):")
+                for g in ats_report['llm_gaps'][:5]:
+                    print(f"     - {g}")
+
+        # ── Combined Score ──
+        print("\n" + "=" * 60)
+        print(f"  ⭐ COMBINED SCORE: {ats_report['combined_score']:.1f}%")
+        if ats_report.get("llm_score") is not None:
+            print(f"     (Algorithmic: {ats_report['algorithmic_score']:.1f}% + AI: {ats_report['llm_score']:.1f}%) / 2")
+        print("=" * 60)
+
+        # Skills summary
+        matched = ats_report.get("matched_skills", [])
+        missing = ats_report.get("missing_skills", [])
+        if matched:
+            print(f"\n  Matched Skills ({len(matched)}): {', '.join(matched[:10])}")
+        if missing:
+            print(f"  Missing Skills ({len(missing)}): {', '.join(missing[:10])}")
+
+        if ats_report["suggestions"]:
+            print("\n  💡 Suggestions:")
+            for s in ats_report["suggestions"]:
+                print(f"     {s}")
+
+        print("=" * 60)
+        proceed = input("\nProceed with interview? [Y/n]: ").strip().lower()
+        if proceed and proceed not in ['y', 'yes', '']:
+            print("Interview cancelled by user.")
+            return False
+        return True
+
+    # ── Session Config ────────────────────────────────────────────
+
+    def _configure_session(self):
+        print("\n" + "=" * 40 + "\n      BEAVER AI - SESSION SETUP\n" + "=" * 40)
+
+        # ── Step 1: Interview Mode ──
+        print("\nSelect interview mode:")
+        print(" [1] Generic  — General interview without a specific job description")
+        print(" [2] Curated  — Tailored interview based on a job description")
+        mode_choice = input("\nEnter choice (1-2) [Default: 1]: ").strip()
+
+        if mode_choice == "2":
+            self.state.interview_mode = "curated"
+            self.jd_text = self._load_jd_interactive()
+
+            # Init brain early so LLM is available for ATS analysis
+            self._init_brain()
+
+            # Run ATS check immediately after JD is loaded
+            if self.ats_checker and self.resume_text and self.jd_text:
+                if not self._run_ats_check(self.resume_text, self.jd_text):
+                    return False
+        else:
+            self.state.interview_mode = "generic"
+            self.jd_text = None
+
+        # ── Step 2: Interview Type ──
+        print("\nSelect interview type:")
+        print(" [1] Technical   — Coding, system design, architecture")
+        print(" [2] Behavioral  — STAR method, teamwork, leadership")
+        print(" [3] HR          — Career goals, culture fit, motivation")
+        print(" [4] Combined    — Mix of all three types")
+        type_choice = input("\nEnter choice (1-4) [Default: 1]: ").strip()
+        type_mapping = {"1": "technical", "2": "behavioral", "3": "hr", "4": "combined"}
+        self.state.interview_type = type_mapping.get(type_choice, "technical")
+
+        # ── Step 3: Difficulty ──
+        print("\nSelect difficulty level:")
+        print(" [1] Easy\n [2] Medium\n [3] Hard\n [4] Extreme")
+        diff_choice = input("\nEnter choice (1-4) [Default: 2]: ").strip()
+        diff_mapping = {"1": "Easy", "2": "Medium", "3": "Hard", "4": "Extreme"}
+        self.state.difficulty = diff_mapping.get(diff_choice, "Medium")
+
+        # ── Step 4: Proctoring ──
+        if self.proctoring:
+            enable_proc = input("\nEnable AI Proctoring? [Y/n]: ").strip().lower()
+            if enable_proc and enable_proc not in ['y', 'yes', '']:
+                self.proctoring = None
+
+        # ── Initialize LLM + RAG if not already done (generic mode) ──
+        if self.brain is None:
+            self._init_brain()
+
+        # Re-initialize prompt_manager with final interview_type
+        from src.brain.prompt_manager import PromptManager
+        resume_str = self.resume_text.raw_text if hasattr(self.resume_text, 'raw_text') else self.resume_text
+        self.brain.prompt_manager = PromptManager(
+            resume_text=resume_str,
+            rag_engine=self.rag_engine,
+            interview_type=self.state.interview_type,
+        )
+
+        print(f"\n>> Configuration Locked:")
+        print(f"   Mode: {self.state.interview_mode.title()}")
+        print(f"   Type: {self.state.interview_type.title()}")
+        print(f"   Difficulty: {self.state.difficulty}")
+        if self.proctoring:
+            print("   Proctoring: ENABLED")
+        time.sleep(1)
+
+    def _load_jd_interactive(self) -> str | None:
+        """Interactive JD loading for curated mode."""
+        if not self.jd_loader:
+            print("[!] RAG is disabled, curated mode unavailable. Using generic mode.")
+            return None
+
+        print("\nHow would you like to provide the job description?")
+        print(" [1] Load from file  — scans data/job_descriptions/ folder")
+        print(" [2] Paste text      — enter the JD text directly")
+        jd_choice = input("\nEnter choice (1-2) [Default: 1]: ").strip()
+
+        if jd_choice == "2":
+            print("\nPaste the job description below (press Enter twice to finish):")
+            lines = []
+            empty_count = 0
+            while True:
+                line = input()
+                if line == "":
+                    empty_count += 1
+                    if empty_count >= 2:
+                        break
+                    lines.append(line)
+                else:
+                    empty_count = 0
+                    lines.append(line)
+            raw_text = "\n".join(lines).strip()
+            jd_text = self.jd_loader.load_from_text(raw_text)
+            if jd_text:
+                print(f"[JDLoader] Loaded {len(jd_text.split())} words from pasted text.")
+            else:
+                print("[JDLoader] Empty text provided. Falling back to generic mode.")
+            return jd_text
+        else:
+            jd_text = self.jd_loader.load_jd()
+            if not jd_text:
+                print("[JDLoader] No JD found in folder. Falling back to generic mode.")
+            return jd_text
+
+    def _init_brain(self) -> None:
+        """Initialize LLM, RAG, and evaluator after session config is locked."""
+        logger.info("Initializing LLM and RAG engines...")
+
+        # Build RAG engine if curated mode with JD text
+        if self.state.interview_mode == "curated" and self.jd_text and settings.ENABLE_RAG:
+            self.rag_engine = RAGEngine(jd_text=self.jd_text)
+        else:
+            self.rag_engine = None
+
+        # Convert ResumeData → raw string for PromptManager
+        resume_str = self.resume_text.raw_text if hasattr(self.resume_text, 'raw_text') else self.resume_text
+
+        self.brain = LLMEngine(
+            resume_text=resume_str,
+            rag_engine=None,
+            interview_type=self.state.interview_type,
+        )
+        self.brain.prompt_manager.rag_engine = self.rag_engine
+
+        self.evaluator = Evaluator(settings.LLM_MODEL_PATH)
+
+    # ── Main Session ──────────────────────────────────────────────
+
+    def _speak(self, text: str) -> None:
+        """Speak text using the appropriate engine."""
+        if hasattr(self.voice_engine, 'speak_text'):
+            self.voice_engine.speak_text(text)
+        elif hasattr(self.voice_engine, 'speak'):
+            self.voice_engine.speak(text, self.detected_language)
+        else:
+            print(f"\n[BeaverAI]: {text}")
+
+    def start_session(self):
+        self._configure_session()
+
+        if self.proctoring:
+            self.proctoring.start()
+            time.sleep(1)
+
+        print(f"--- Interview Session Started (ID: {self.state.session_id}) ---")
+
+        # Greeting
+        self._speak(f"Hello! I am ready for the {self.state.difficulty} interview. Let's begin.")
+
+        (settings.BASE_DIR / "data" / "temp").mkdir(parents=True, exist_ok=True)
+
+        # Generate opening question based on resume/JD
+        self._generate_opening_question()
+
+        while self.state.is_active:
+            try:
+                print(f"\n[Status] Listening...")
+                audio_data = self.recorder.listen_and_record(prepend_audio=self.next_turn_audio)
+                self.next_turn_audio = None
+
+                if audio_data is None or len(audio_data) == 0:
+                    continue
+
+                temp_wav = settings.BASE_DIR / "data" / "temp" / f"input_{self.state.question_count}.wav"
+                sf.write(str(temp_wav), audio_data, 16000)
+
+                user_text, detected_lang = self.ears.transcribe(str(temp_wav), language=None)
+                self.detected_language = detected_lang
+
+                print(f"[User]: {user_text}")
+
+                if not user_text.strip():
+                    continue
+
+                txt = user_text.lower().strip()
+                is_exit_command = False
+
+                exit_phrases = ["end interview", "stop the interview", "exit interview",
+                                "terminate session", "i want to quit"]
+                if any(p in txt for p in exit_phrases):
+                    is_exit_command = True
+
+                if len(txt.split()) <= 3 and any(w in txt for w in ["exit", "quit", "stop", "bye"]):
+                    is_exit_command = True
+
+                if is_exit_command:
+                    self._speak("Are you sure you want to end the interview?")
+
+                    print(">> Waiting for confirmation...")
+
+                    confirm_audio = self.recorder.listen_and_record()
+                    if confirm_audio is not None and len(confirm_audio) > 0:
+                        sf.write(str(temp_wav), confirm_audio, 16000)
+                    else:
+                        print("No audio recorded, assuming exit.")
+                        break
+
+                    confirm_text, _ = self.ears.transcribe(str(temp_wav))
+                    confirm_text = confirm_text.lower()
+                    print(f"[Confirmation]: {confirm_text}")
+
+                    if any(x in confirm_text for x in ["yes", "yeah", "sure", "correct", "end", "right", "bye"]):
+                        self._speak("Ending session.")
+                        break
+                    else:
+                        self._speak("Resuming the interview.")
+                        continue
+
+                # ── Toxicity check BEFORE sending to LLM ──
+                if self._is_toxic(user_text):
+                    self._toxicity_warnings += 1
+                    if self._toxicity_warnings >= self._max_toxicity_warnings:
+                        self._speak(
+                            "This interview is being terminated due to repeated inappropriate language. "
+                            "Please maintain professionalism in future interviews."
+                        )
+                        print(f"[!] Session auto-ended: {self._toxicity_warnings} toxicity warnings")
+                        break
+                    else:
+                        self._speak(
+                            f"Warning {self._toxicity_warnings}/{self._max_toxicity_warnings}: "
+                            "Please maintain a professional tone. "
+                            "One more violation will end this interview."
+                        )
+                        continue
+
+                print("[Status] Thinking...")
+                response_generator = self.brain.generate_stream(user_text, self.state.difficulty)
+
+                print("[Status] Generating response...")
+                if hasattr(self.voice_engine, 'speak_stream'):
+                    self.next_turn_audio = self.voice_engine.speak_stream(response_generator)
+                else:
+                    response_text = "".join(list(response_generator))
+                    self._speak(response_text)
+
+                self.audio_responses.append(str(temp_wav))
+                self.state.question_count += 1
+
+            except KeyboardInterrupt:
+                print("\n[!] Interview interrupted by user")
+                break
+            except Exception as e:
+                print(f"\n[Error] {e}")
+                import traceback
+                traceback.print_exc()
+                break
+
+        self.end_session()
+
+    def _generate_opening_question(self) -> None:
+        """Generate the first interview question based on resume/JD context."""
+        opening_prompt = self.brain.prompt_manager.get_opening_prompt(self.state.difficulty)
+
+        print("[Status] Preparing first question...")
+        response_generator = self.brain.generate_stream(opening_prompt, self.state.difficulty)
+
+        if hasattr(self.voice_engine, 'speak_stream'):
+            self.voice_engine.speak_stream(response_generator)
+        else:
+            response_text = "".join(list(response_generator))
+            self._speak(response_text)
+
+    # ── End Session ───────────────────────────────────────────────
+
+    def end_session(self):
+        print("\n--- Session Ended ---")
+
+        try:
+            if self.proctoring:
+                self.proctoring.stop()
+        except Exception as e:
+            logger.warning(f"Proctoring stop failed: {e}")
+
+        try:
+            history = self.brain.get_history()
+
+            print(f"\n[Report] Generating evaluation report...")
+            report = self.evaluator.generate_report(history)
+            report["transcript"] = history
+
+            if self.sentiment_analyzer and self.audio_responses:
+                try:
+                    print("[Report] Analyzing sentiment and speech quality...")
+                    sentiment_results = []
+                    for i, audio_path in enumerate(self.audio_responses):
+                        hist_idx = i - 1
+                        if Path(audio_path).exists() and hist_idx < len(history) and history[hist_idx]['role'] == 'user':
+                            result = self.sentiment_analyzer.analyze_full(audio_path, history[hist_idx]['content'])
+                            sentiment_results.append(result)
+
+                    if sentiment_results:
+                        avg_confidence = np.mean([r['confidence_score'] for r in sentiment_results])
+                        all_emotions = {}
+                        for r in sentiment_results:
+                            for emotion, score in r['emotions'].items():
+                                all_emotions[emotion] = all_emotions.get(emotion, 0) + score
+
+                        dominant_emotion = max(all_emotions.items(), key=lambda x: x[1])[0] if all_emotions else "neutral"
+                        total_fillers = sum(r['fillers']['total_fillers'] for r in sentiment_results)
+                        avg_wpm = np.mean([r['speech_metrics'].get('wpm', 0) for r in sentiment_results])
+
+                        report["sentiment_analysis"] = {
+                            "average_confidence": round(avg_confidence, 2),
+                            "dominant_emotion": dominant_emotion,
+                            "speaking_pace_wpm": round(avg_wpm, 1),
+                            "total_filler_words": total_fillers,
+                            "detailed_results": sentiment_results,
+                        }
+                except Exception as e:
+                    logger.warning(f"Sentiment analysis failed: {e}")
+
+            if self.proctoring:
+                try:
+                    violations_summary = self.proctoring.get_violations_summary()
+                    report["proctoring"] = violations_summary
+                except Exception as e:
+                    logger.warning(f"Proctoring summary failed: {e}")
+
+            settings.TRANSCRIPTS_DIR.mkdir(parents=True, exist_ok=True)
+            filename = settings.TRANSCRIPTS_DIR / f"{self.state.session_id}_report.json"
+
+            with open(filename, "w") as f:
+                json.dump(report, f, indent=2)
+
+            print(f"✅ Report saved to: {filename}")
+
+        except Exception as e:
+            print(f"\n[Error] Report generation failed: {e}")
+            import traceback
+            traceback.print_exc()
+
+
+=== FILE: src\core\jd_loader.py ===
+from pathlib import Path
+from pypdf import PdfReader
+from config import settings
+
+class JDLoader:
+    def __init__(self):
+        self.jd_dir = settings.JD_DIR
+        self.jd_dir.mkdir(parents=True, exist_ok=True)
+    
+    def load_jd(self):
+        print(f"Scanning for Job Descriptions in: {self.jd_dir}")
+        
+        pdfs = list(self.jd_dir.glob("*.pdf"))
+        txt_files = list(self.jd_dir.glob("*.txt"))
+        
+        all_files = pdfs + txt_files
+        
+        if not all_files:
+            print("[JDLoader] No JD found. Using generic interview mode.")
+            return None
+        
+        target_file = all_files[0]
+        print(f"[JDLoader] Found JD: {target_file.name}")
+        
+        try:
+            if target_file.suffix == ".pdf":
+                return self._load_pdf(target_file)
+            else:
+                return self._load_txt(target_file)
+        except Exception as e:
+            print(f"[JDLoader] Error reading file: {e}")
+            return None
+    
+    def _validate_file_path(self, file_path, expected_dir):
+        MAX_FILE_SIZE = 10 * 1024 * 1024
+        
+        if not file_path.is_file():
+            raise ValueError("Invalid file path")
+        
+        file_size = file_path.stat().st_size
+        if file_size > MAX_FILE_SIZE:
+            raise ValueError(f"File too large: {file_size} bytes (max 10MB)")
+        
+        if file_size == 0:
+            raise ValueError("File is empty")
+        
+        try:
+            file_path_resolved = file_path.resolve()
+            if not str(file_path_resolved).startswith(str(expected_dir.resolve())):
+                raise ValueError("Path traversal detected")
+        except (FileNotFoundError, OSError) as e:
+            raise ValueError("Invalid file path") from e
+        
+        return file_path_resolved
+    
+    def _load_pdf(self, file_path):
+        if not file_path.suffix.lower() == '.pdf':
+            raise ValueError("File must be PDF")
+        
+        validated_path = self._validate_file_path(file_path, self.jd_dir)
+        
+        text = ""
+        reader = PdfReader(validated_path)
+        for page in reader.pages:
+            page_text = page.extract_text()
+            if page_text:
+                text += page_text + "\n"
+        return " ".join(text.split())
+    
+    def _load_txt(self, file_path):
+        if not file_path.suffix.lower() == '.txt':
+            raise ValueError("File must be TXT")
+        
+        validated_path = self._validate_file_path(file_path, self.jd_dir)
+        
+        with open(validated_path, 'r', encoding='utf-8') as f:
+            text = f.read()
+        return " ".join(text.split())
+    
+    def load_from_path(self, file_path):
+        """Load JD from an arbitrary file path (PDF or TXT).
+
+        Args:
+            file_path: Path object or string pointing to a .pdf or .txt file.
+
+        Returns:
+            Extracted text, or None on failure.
+        """
+        file_path = Path(file_path)
+        if not file_path.is_file():
+            print(f"[JDLoader] File not found: {file_path}")
+            return None
+
+        try:
+            if file_path.suffix.lower() == ".pdf":
+                reader = PdfReader(file_path)
+                text = ""
+                for page in reader.pages:
+                    page_text = page.extract_text()
+                    if page_text:
+                        text += page_text + "\n"
+                return " ".join(text.split()) if text.strip() else None
+            elif file_path.suffix.lower() == ".txt":
+                with open(file_path, "r", encoding="utf-8") as f:
+                    text = f.read()
+                return " ".join(text.split()) if text.strip() else None
+            else:
+                print(f"[JDLoader] Unsupported file type: {file_path.suffix}")
+                return None
+        except Exception as e:
+            print(f"[JDLoader] Error reading file: {e}")
+            return None
+
+    def load_from_text(self, text):
+        """Normalize raw text input as a JD.
+
+        Args:
+            text: Raw job description text.
+
+        Returns:
+            Normalized text string, or None if empty.
+        """
+        if not text or not text.strip():
+            return None
+        return " ".join(text.split())
+
+    def chunk_text(self, text, chunk_size=150, overlap=50):
+        """Split text into overlapping word-level chunks."""
+        if not text:
+            return []
+        
+        words = text.split()
+        chunks = []
+        step = max(chunk_size - overlap, 1)
+        
+        for i in range(0, len(words), step):
+            chunk = " ".join(words[i:i + chunk_size])
+            if chunk.strip():
+                chunks.append(chunk)
+            if i + chunk_size >= len(words):
+                break
+        
+        return chunks
+
+
+=== FILE: src\core\jd_parser.py ===
+import re
+
+class JobDescriptionParser:
+    """Parses raw job description text into structured sections."""
+    def __init__(self):
+        self.section_patterns = {
+            "requirements": [r"requirements", r"qualifications", r"what we're looking for", r"what you need", r"skills"],
+            "responsibilities": [r"responsibilities", r"what you'll do", r"role", r"duties"],
+            "benefits": [r"benefits", r"perks", r"what we offer"]
+        }
+
+    def parse(self, text: str) -> dict:
+        sections = {"requirements": "", "responsibilities": "", "benefits": "", "experience": ""}
+        if not text:
+            return sections
+        
+        current_section = None
+        lines = text.split('\n')
+        
+        for line in lines:
+            line_lower = line.strip().lower()
+            found_section = False
+            for sec, keywords in self.section_patterns.items():
+                if any(kw == line_lower or line_lower.startswith(kw + ":") for kw in keywords) and len(line_lower) < 60:
+                    current_section = sec
+                    found_section = True
+                    break
+            
+            if current_section and not found_section:
+                sections[current_section] += line + "\n"
+                
+        if not sections["requirements"].strip() and not sections["responsibilities"].strip():
+            sections["requirements"] = text
+            
+        sections["experience"] = self._extract_experience(text)
+        return sections
+
+    def _extract_experience(self, text: str) -> str:
+        # Match "X years", "X+ years", "X-Y years", etc.
+        pattern = r'(\d+)\+?\s*(?:to|-)\s*(\d+)?\s*years?|(\d+)\+?\s*years?'
+        matches = re.finditer(pattern, text, re.IGNORECASE)
+        for match in matches:
+            return match.group(0)
+        return ""
+
+jd_parser = JobDescriptionParser()
+
+
+=== FILE: src\core\resume_loader.py ===
+import sys
+from pathlib import Path
+from pypdf import PdfReader
+from src.core.resume_parser import parser
+
+try:
+    from docx import Document
+    DOCX_AVAILABLE = True
+except ImportError:
+    DOCX_AVAILABLE = False
+
+from config import settings
+
+class ResumeData:
+    def __init__(self, raw_text: str, parsed_sections: dict):
+        self.raw_text = raw_text
+        self.parsed_sections = parsed_sections
+        # Fallback dictionary access for older code
+        self.text = raw_text
+    
+    def __str__(self):
+        return self.raw_text
+    
+    def __len__(self):
+        return len(self.raw_text)
+
+class ResumeLoader:
+    def __init__(self):
+        self.resume_dir = settings.BASE_DIR / "data" / "resumes"
+        self.resume_dir.mkdir(parents=True, exist_ok=True)
+    
+    def load_resume(self):
+        print(f"Scanning for resumes in: {self.resume_dir}")
+        pdfs = list(self.resume_dir.glob("*.pdf"))
+        docxs = list(self.resume_dir.glob("*.docx")) if DOCX_AVAILABLE else []
+        
+        resumes = pdfs + docxs
+        if not resumes:
+            print("[ResumeLoader] No resume found. Proceeding without resume context.")
+            return None
+        
+        target_resume = resumes[0]
+        print(f"[ResumeLoader] Found resume: {target_resume.name}")
+        
+        try:
+            return self.load_from_path(target_resume)
+        except Exception as e:
+            print(f"[ResumeLoader] Error reading document: {e}")
+            return None
+
+    def load_from_path(self, file_path: Path):
+        MAX_FILE_SIZE = 10 * 1024 * 1024
+        
+        if not file_path.is_file():
+            raise ValueError("Invalid file path")
+        
+        ext = file_path.suffix.lower()
+        if ext not in ['.pdf', '.docx']:
+            raise ValueError("File must be PDF or DOCX")
+            
+        if ext == '.docx' and not DOCX_AVAILABLE:
+            raise ValueError("python-docx is not installed. Please pip install python-docx")
+        
+        file_size = file_path.stat().st_size
+        if file_size > MAX_FILE_SIZE:
+            raise ValueError(f"File too large: {file_size} bytes (max 10MB)")
+        
+        if file_size == 0:
+            raise ValueError("File is empty")
+        
+        try:
+            file_path_resolved = file_path.resolve()
+        except (FileNotFoundError, OSError) as e:
+            raise ValueError("Invalid file path") from e
+        
+        text = ""
+        if ext == '.pdf':
+            reader = PdfReader(file_path)
+            # Parse all pages unconditionally to guarantee no cutoff
+            for page in reader.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    text += page_text + "\n"
+        elif ext == '.docx':
+            doc = Document(file_path)
+            for para in doc.paragraphs:
+                if para.text:
+                    text += para.text + "\n"
+                    
+        # Clean whitespace but DO NOT truncate the text length
+        # Using a single space join can mess up line-based parsing slightly but we do it per \n to preserve lines
+        lines = [line.strip() for line in text.split('\n') if line.strip()]
+        clean_text = "\n".join(lines)
+        
+        # Parse into sections
+        parsed_sections = parser.parse(clean_text)
+        return ResumeData(raw_text=clean_text, parsed_sections=parsed_sections)
+
+=== FILE: src\core\resume_parser.py ===
+import re
+from typing import Dict, Any, List
+
+class ResumeParser:
+    """Robust regex and heuristic-based parser that guarantees full-text processing."""
+    
+    def __init__(self):
+        # Common section headers
+        self.section_headers = {
+            "education": [r"(?i)^education", r"(?i)^academic background", r"(?i)^academics"],
+            "experience": [r"(?i)^experience", r"(?i)^work experience", r"(?i)^employment", r"(?i)^professional experience", r"(?i)^history"],
+            "projects": [r"(?i)^projects", r"(?i)^personal projects", r"(?i)^academic projects"],
+            "skills": [r"(?i)^skills", r"(?i)^technical skills", r"(?i)^core competencies", r"(?i)^technologies"],
+        }
+    
+    def parse(self, text: str) -> Dict[str, str]:
+        """
+        Parses the full text line-by-line into sections. 
+        Guarantees no arbitrary text cutoff.
+        """
+        if not text:
+            return {"raw": ""}
+
+        sections = {
+            "education": [],
+            "experience": [],
+            "projects": [],
+            "skills": [],
+            "other": []
+        }
+        
+        current_section = "other"
+        
+        lines = [line.strip() for line in text.split("\n")]
+        
+        for line in lines:
+            if not line:
+                continue
+            
+            # Check if this line is a section header (usually short, standalone lines)
+            is_header = False
+            if len(line) < 60:
+                # remove special chars that might surround a header
+                clean_line = re.sub(r'[^a-zA-Z\s]', '', line).strip()
+                for sec, patterns in self.section_headers.items():
+                    if any(re.match(p, clean_line) for p in patterns):
+                        current_section = sec
+                        is_header = True
+                        break
+            
+            if not is_header:
+                sections[current_section].append(line)
+                
+        # Join lines back together for each section
+        return {k: "\n".join(v) for k, v in sections.items()}
+
+parser = ResumeParser()
+
+
+=== FILE: src\core\session_state.py ===
+import secrets
+import time
+from dataclasses import dataclass, field
+
+VALID_DIFFICULTIES = ("Easy", "Medium", "Hard", "Extreme")
+VALID_MODES = ("generic", "curated")
+VALID_INTERVIEW_TYPES = ("technical", "behavioral", "hr", "combined")
+
+
+@dataclass
+class SessionState:
+    """Tracks interview session metadata and state."""
+
+    session_id: str = field(default_factory=lambda: secrets.token_hex(16))
+    difficulty: str = "Medium"
+    interview_mode: str = "generic"
+    interview_type: str = "technical"
+    question_count: int = 0
+    is_active: bool = True
+    started_at: float = field(default_factory=time.time)
+
+    def update_difficulty(self, new_diff: str) -> bool:
+        """Update difficulty if valid. Returns True on success."""
+        if new_diff not in VALID_DIFFICULTIES:
+            return False
+        self.difficulty = new_diff
+        return True
+
+    def update_mode(self, mode: str) -> bool:
+        """Update interview mode if valid. Returns True on success."""
+        if mode not in VALID_MODES:
+            return False
+        self.interview_mode = mode
+        return True
+
+    def update_interview_type(self, itype: str) -> bool:
+        """Update interview type if valid. Returns True on success."""
+        if itype not in VALID_INTERVIEW_TYPES:
+            return False
+        self.interview_type = itype
+        return True
+
+    def increment_question(self) -> int:
+        """Increment and return the new question count."""
+        self.question_count += 1
+        return self.question_count
+
+    def elapsed_seconds(self) -> float:
+        """Return seconds since session started."""
+        return time.time() - self.started_at
+
+    def to_dict(self) -> dict:
+        """Serialize state for JSON storage."""
+        return {
+            "session_id": self.session_id,
+            "difficulty": self.difficulty,
+            "interview_mode": self.interview_mode,
+            "interview_type": self.interview_type,
+            "question_count": self.question_count,
+            "is_active": self.is_active,
+            "started_at": self.started_at,
+            "elapsed_seconds": round(self.elapsed_seconds(), 1),
+        }
+
+    def __repr__(self) -> str:
+        return (
+            f"SessionState(id={self.session_id[:8]}..., "
+            f"mode={self.interview_mode}, "
+            f"type={self.interview_type}, "
+            f"difficulty={self.difficulty}, "
+            f"questions={self.question_count}, "
+            f"active={self.is_active})"
+        )
+
+=== FILE: src\core\skill_ontology.py ===
+import re
+
+class SkillOntology:
+    """Centralized taxonomy and normalizer for technical and soft skills."""
+    
+    def __init__(self):
+        # Maps variations to a canonical skill name
+        self.abbreviations = {
+            "js": "javascript",
+            "ts": "typescript",
+            "reactjs": "react",
+            "react.js": "react",
+            "node.js": "node",
+            "nodejs": "node",
+            "vuejs": "vue",
+            "vue.js": "vue",
+            "k8s": "kubernetes",
+            "aws": "amazon web services",
+            "gcp": "google cloud platform",
+            "ml": "machine learning",
+            "ai": "artificial intelligence",
+            "nlp": "natural language processing",
+            "db": "database",
+            "cpp": "c++",
+            "c#": "csharp",
+            "golang": "go",
+            "postgres": "postgresql"
+        }
+        
+    def normalize_skill(self, skill: str) -> str:
+        """Returns the canonical lowercase string of a skill."""
+        if not skill:
+            return ""
+        s = skill.lower().strip()
+        return self.abbreviations.get(s, s)
+
+ontology = SkillOntology()
+
+
+=== FILE: src\core\__init__.py ===
+from src.core.ats_checker import ATSChecker
+from src.core.cache_manager import CacheManager, get_cache_manager
+from src.core.interview_manager import InterviewManager
+from src.core.jd_loader import JDLoader
+from src.core.resume_loader import ResumeLoader
+from src.core.session_state import SessionState
+
+__all__ = [
+    "ATSChecker",
+    "CacheManager",
+    "InterviewManager",
+    "JDLoader",
+    "ResumeLoader",
+    "SessionState",
+    "get_cache_manager",
+]
+
+
+=== FILE: src\ears\sentiment_analyzer.py ===
+import re
+import logging
+from typing import Optional
+
+import torch
+import numpy as np
+import librosa
+from transformers import Wav2Vec2ForSequenceClassification, Wav2Vec2FeatureExtractor
+
+from config import settings
+
+logger = logging.getLogger("SentimentAnalyzer")
+
+SAMPLE_RATE = 16000
+MIN_AUDIO_DURATION = 1.0
+MIN_ENERGY_THRESHOLD = 0.001
+MIN_PREDICTION_CONFIDENCE = 0.2
+
+
+class SentimentAnalyzer:
+    """Analyzes candidate speech for emotion, fluency, and filler words."""
+
+    def __init__(self) -> None:
+        self.feature_extractor: Optional[Wav2Vec2FeatureExtractor] = None
+        self.model: Optional[Wav2Vec2ForSequenceClassification] = None
+        self.emotion_labels: list[str] = ["angry", "disgust", "fear", "happy", "neutral", "sad"]
+
+        try:
+            logger.info("Loading emotion recognition model...")
+            self.feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(
+                settings.EMOTION_MODEL_NAME
+            )
+            self.model = Wav2Vec2ForSequenceClassification.from_pretrained(
+                settings.EMOTION_MODEL_NAME
+            )
+            logger.info("Emotion model loaded successfully")
+        except (OSError, ValueError, RuntimeError) as e:
+            logger.error(f"Failed to load emotion model: {e}")
+            self.feature_extractor = None
+            self.model = None
+
+    def analyze_emotion(self, audio_path: str) -> dict[str, float]:
+        """Detect emotions from audio using Wav2Vec2."""
+        if not self.model:
+            return {"neutral": 1.0}
+
+        try:
+            import soundfile as sf
+
+            waveform, sample_rate = sf.read(audio_path, dtype='float32')
+
+            duration = len(waveform) / sample_rate
+            if duration < MIN_AUDIO_DURATION:
+                logger.warning(f"Audio too short ({duration:.2f}s), skipping emotion analysis")
+                return {"neutral": 1.0}
+
+            if len(waveform.shape) > 1:
+                waveform = np.mean(waveform, axis=1)
+
+            if sample_rate != SAMPLE_RATE:
+                waveform = librosa.resample(waveform, orig_sr=sample_rate, target_sr=SAMPLE_RATE)
+
+            energy = np.sqrt(np.mean(waveform ** 2))
+            if energy < MIN_ENERGY_THRESHOLD:
+                logger.warning(f"Audio has very low energy ({energy:.6f}), likely silence")
+                return {"neutral": 1.0}
+
+            inputs = self.feature_extractor(
+                waveform,
+                sampling_rate=SAMPLE_RATE,
+                return_tensors="pt",
+                padding=True
+            )
+
+            with torch.no_grad():
+                logits = self.model(**inputs).logits
+                probs = torch.nn.functional.softmax(logits, dim=-1)[0]
+
+            if float(probs.max()) < MIN_PREDICTION_CONFIDENCE:
+                logger.warning(f"Model predictions seem random (max prob: {float(probs.max()):.3f})")
+                return {"neutral": 1.0}
+
+            emotions = {label: float(probs[idx]) for idx, label in enumerate(self.emotion_labels)}
+            logger.debug(f"Emotion analysis: {emotions}")
+            return emotions
+        except (OSError, RuntimeError, ValueError) as e:
+            logger.error(f"Emotion analysis failed: {e}")
+            return {"neutral": 1.0}
+
+    def calculate_speech_metrics(self, audio_path: str, transcript: str) -> dict[str, float]:
+        """Calculate WPM, jitter, and shimmer from audio."""
+        try:
+            y, sr = librosa.load(audio_path, sr=SAMPLE_RATE)
+            duration = librosa.get_duration(y=y, sr=sr)
+
+            word_count = len(transcript.split())
+            wpm = (word_count / duration) * 60 if duration > 0 else 0
+
+            pitches, _ = librosa.piptrack(y=y, sr=sr)
+            pitch_values = pitches[pitches > 0]
+            jitter = float(np.std(pitch_values) / (np.mean(pitch_values) + 1e-6)) if len(pitch_values) > 1 else 0.0
+
+            rms = librosa.feature.rms(y=y)[0]
+            shimmer = float(np.std(rms) / (np.mean(rms) + 1e-6)) if len(rms) > 1 else 0.0
+
+            return {
+                "wpm": round(wpm, 1),
+                "jitter": round(jitter, 4),
+                "shimmer": round(shimmer, 4),
+            }
+        except (OSError, RuntimeError, ValueError) as e:
+            logger.error(f"Speech metrics calculation failed: {e}")
+            return {"wpm": 0, "jitter": 0, "shimmer": 0}
+
+    def detect_fillers(self, transcript: str) -> dict:
+        """Count filler words in transcript."""
+        text_lower = transcript.lower()
+        filler_count: dict[str, int] = {}
+        total_fillers = 0
+
+        for filler in settings.FILLER_WORDS:
+            pattern = r'\b' + re.escape(filler) + r'\b'
+            count = len(re.findall(pattern, text_lower))
+            if count > 0:
+                filler_count[filler] = count
+                total_fillers += count
+
+        return {"total_fillers": total_fillers, "filler_breakdown": filler_count}
+
+    def analyze_full(self, audio_path: str, transcript: str) -> dict:
+        """Run full sentiment pipeline: emotion + speech metrics + fillers."""
+        emotions = self.analyze_emotion(audio_path)
+        speech_metrics = self.calculate_speech_metrics(audio_path, transcript)
+        fillers = self.detect_fillers(transcript)
+
+        dominant_emotion = max(emotions.items(), key=lambda x: x[1])[0]
+
+        confidence_score = 0.5
+        if emotions.get("happy", 0) + emotions.get("neutral", 0) > 0.7:
+            confidence_score = 0.7
+        if speech_metrics.get("jitter", 0) > 0.05 or fillers["total_fillers"] > 5:
+            confidence_score -= 0.2
+
+        return {
+            "emotions": emotions,
+            "dominant_emotion": dominant_emotion,
+            "speech_metrics": speech_metrics,
+            "fillers": fillers,
+            "confidence_score": max(0, min(1, confidence_score)),
+        }
+
+
+=== FILE: src\ears\stt_engine.py ===
+import logging
+from faster_whisper import WhisperModel
+from config import settings
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("STTEngine")
+
+class STTEngine:
+    """Speech-to-Text engine using Faster Whisper."""
+
+    def __init__(self) -> None:
+        logger.info(f"Loading Whisper model: {settings.STT_MODEL_SIZE}...")
+        try:
+            self.model = WhisperModel(
+                settings.STT_MODEL_SIZE, 
+                device=settings.STT_DEVICE, 
+                compute_type="float16" if settings.STT_DEVICE == "cuda" else "int8"
+            )
+            logger.info("Whisper Loaded Successfully.")
+        except Exception as e:
+            logger.error(f"Failed to load Whisper: {e}")
+            raise e
+
+    def transcribe(self, audio_path: str, language: str | None = None) -> tuple[str, str]:
+        """Transcribe audio file and return (text, detected_language)."""
+        MAX_AUDIO_SIZE = 25 * 1024 * 1024
+        ALLOWED_EXTENSIONS = {'.wav', '.mp3', '.flac', '.m4a', '.ogg'}
+        
+        if not audio_path:
+            return "", "en"
+        
+        from pathlib import Path
+        audio_file = Path(audio_path)
+        
+        if not audio_file.is_file():
+            logger.warning(f"Audio file not found: {audio_path}")
+            return "", "en"
+        
+        if audio_file.suffix.lower() not in ALLOWED_EXTENSIONS:
+            logger.warning(f"Invalid audio format: {audio_file.suffix}")
+            return "", "en"
+        
+        file_size = audio_file.stat().st_size
+        if file_size > MAX_AUDIO_SIZE:
+            logger.warning(f"Audio file too large: {file_size} bytes")
+            return "", "en"
+        
+        if file_size == 0:
+            logger.warning("Audio file is empty")
+            return "", "en"
+        
+        try:
+            segments, info = self.model.transcribe(
+                str(audio_file), 
+                language=language,
+                beam_size=5,
+                vad_filter=True, 
+                vad_parameters=dict(min_silence_duration_ms=500)
+            )
+
+            text = " ".join([segment.text for segment in segments]).strip()
+            text = text[:5000]
+            detected_language = info.language if hasattr(info, 'language') else "en"
+            return text, detected_language
+        except Exception as e:
+            logger.exception(f"Transcription failed for {audio_path}: {e}")
+            return "", "en"
+
+
+=== FILE: src\ears\vad.py ===
+import torch
+import sounddevice as sd
+import numpy as np
+import time
+import logging
+
+logger = logging.getLogger("VoiceRecorder")
+
+class VoiceRecorder:
+    """Voice Activity Detection recorder using Silero VAD."""
+
+    def __init__(self, sample_rate: int = 16000) -> None:
+        self.sample_rate = sample_rate
+        print("[VAD] Loading Silero VAD Model...")
+        self.model, utils = torch.hub.load(
+            repo_or_dir='snakers4/silero-vad',
+            model='silero_vad',
+            force_reload=False,
+            onnx=False
+        )
+        print("[VAD] Silero Model Loaded.")
+        self.base_threshold = 0.5
+        self.speaking_threshold = 0.85
+        self.current_threshold = self.base_threshold
+
+    def set_mode(self, mode: str) -> None:
+        """Switch VAD threshold between 'listening' and 'speaking' modes."""
+        if mode == 'listening': self.current_threshold = self.base_threshold
+        elif mode == 'speaking': self.current_threshold = self.speaking_threshold
+
+    def listen_and_record(self, prepend_audio=None, max_duration: int = 120) -> np.ndarray:
+        """Record audio until speech ends (silence detected), return numpy array."""
+        
+        self.set_mode('listening') 
+        
+        buffer = []
+        speech_started = False
+        silence_start = None
+        chunk_size = 512 
+        start_time = time.time()
+
+        
+        if prepend_audio is not None and len(prepend_audio) > 0:
+            print("\r[Recorder] Resuming from interruption...", end="", flush=True)
+            buffer.append(prepend_audio)
+            speech_started = True 
+            silence_start = None
+        else:
+            print("\r[Recorder] Listening...", end="", flush=True)
+
+        with sd.InputStream(samplerate=self.sample_rate, channels=1, callback=None) as stream:
+            while True:
+                if time.time() - start_time > max_duration:
+                    print("\n[Recorder] Timeout - max recording duration reached")
+                    break
+                
+                data, _ = stream.read(chunk_size)
+                audio_chunk = data.flatten().astype(np.float32)
+                buffer.append(audio_chunk)
+                
+                if self._check_speech(audio_chunk, self.current_threshold):
+                    if not speech_started:
+                        print("\r[Recorder] Speech Detected!   ", end="", flush=True)
+                        speech_started = True
+                    silence_start = None
+                
+                elif speech_started:
+                    if silence_start is None:
+                        silence_start = time.time()
+                    elif time.time() - silence_start > 1.2: 
+                        print("\n[Recorder] Processing...")
+                        break
+        
+        if buffer:
+            return np.concatenate(buffer)
+        else:
+            return np.array([], dtype=np.float32)
+
+    def is_speech_chunk(self, audio_chunk: np.ndarray) -> bool:
+        """Check if a 512-sample audio chunk contains speech."""
+        return self._check_speech(audio_chunk, threshold=0.6)
+
+    def _check_speech(self, audio_chunk: np.ndarray, threshold: float) -> bool:
+        if len(audio_chunk) != 512: 
+            return False
+        try:
+            tensor = torch.from_numpy(audio_chunk)
+            prob = self.model(tensor, self.sample_rate).item()
+            return prob > threshold
+        except Exception as e:
+            logger.error(f"VAD speech check error: {e}")
+            return False
+
+=== FILE: src\ears\__init__.py ===
+from src.ears.sentiment_analyzer import SentimentAnalyzer
+from src.ears.stt_engine import STTEngine
+from src.ears.vad import VoiceRecorder
+
+__all__ = ["SentimentAnalyzer", "STTEngine", "VoiceRecorder"]
+
+
+=== FILE: src\eyes\proctoring_engine.py ===
+import logging
+from typing import Optional
+
+import cv2
+import mediapipe as mp
+import numpy as np
+
+logger = logging.getLogger("ProctoringEngine")
+
+GAZE_LEFT_THRESHOLD = 0.25
+GAZE_RIGHT_THRESHOLD = 0.75
+GAZE_UP_THRESHOLD = 0.25
+GAZE_DOWN_THRESHOLD = 0.75
+HEAD_TILT_DOWN_THRESHOLD = -25
+
+class ProctoringEngine:
+    """Computer vision engine for interview proctoring using MediaPipe FaceMesh."""
+
+    def __init__(self) -> None:
+        try:
+            from mediapipe.python.solutions import face_mesh as mp_face_mesh
+            
+            self.mp_face_mesh = mp_face_mesh
+            self.face_mesh = self.mp_face_mesh.FaceMesh(
+                max_num_faces=2,
+                refine_landmarks=True,
+                min_detection_confidence=0.5,
+                min_tracking_confidence=0.5
+            )
+        except (ImportError, AttributeError):
+            self.mp_face_mesh = mp.solutions.face_mesh
+            self.face_mesh = self.mp_face_mesh.FaceMesh(
+                max_num_faces=2,
+                refine_landmarks=True,
+                min_detection_confidence=0.5,
+                min_tracking_confidence=0.5
+            )
+
+        
+        self.iris_left = list(range(474, 479))
+        self.iris_right = list(range(469, 474))
+        
+        self.left_eye_indices = [33, 133, 160, 159, 158, 157, 173]
+        self.right_eye_indices = [362, 263, 387, 386, 385, 384, 398]
+        
+        logger.info("Proctoring engine initialized")
+
+    def detect_faces(self, frame: np.ndarray) -> tuple[int, Optional[list]]:
+        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        results = self.face_mesh.process(rgb_frame)
+        
+        if not results.multi_face_landmarks:
+            return 0, None
+        
+        return len(results.multi_face_landmarks), results.multi_face_landmarks
+
+    def calculate_gaze_direction(self, face_landmarks, frame_shape: tuple) -> tuple[str, float, float]:
+        try:
+            h, w = frame_shape[:2]
+            
+            if not face_landmarks or not face_landmarks.landmark:
+                return "unknown", 0.5, 0.5
+            
+            if len(face_landmarks.landmark) <= max(self.iris_left + self.left_eye_indices):
+                return "unknown", 0.5, 0.5
+            
+            left_iris_points = []
+            for idx in self.iris_left:
+                if idx < len(face_landmarks.landmark):
+                    landmark = face_landmarks.landmark[idx]
+                    x, y = int(landmark.x * w), int(landmark.y * h)
+                    left_iris_points.append((x, y))
+            
+            if not left_iris_points:
+                return "center", 0.5, 0.5
+                
+            left_iris_center = np.mean(left_iris_points, axis=0)
+            
+            left_eye_points = []
+            for idx in self.left_eye_indices:
+                if idx < len(face_landmarks.landmark):
+                    landmark = face_landmarks.landmark[idx]
+                    x, y = int(landmark.x * w), int(landmark.y * h)
+                    left_eye_points.append((x, y))
+            
+            if not left_eye_points:
+                return "center", 0.5, 0.5
+            
+            eye_left = min([p[0] for p in left_eye_points])
+            eye_right = max([p[0] for p in left_eye_points])
+            eye_top = min([p[1] for p in left_eye_points])
+            eye_bottom = max([p[1] for p in left_eye_points])
+            
+            eye_width = eye_right - eye_left
+            eye_height = eye_bottom - eye_top
+            
+            if eye_width == 0 or eye_height == 0:
+                return "center", 0.5, 0.5
+            
+            horizontal_ratio = (left_iris_center[0] - eye_left) / (eye_width + 1e-6)
+            vertical_ratio = (left_iris_center[1] - eye_top) / (eye_height + 1e-6)
+            
+            gaze = "center"
+            
+            if horizontal_ratio < GAZE_LEFT_THRESHOLD:
+                gaze = "left"
+            elif horizontal_ratio > GAZE_RIGHT_THRESHOLD:
+                gaze = "right"
+            
+            if vertical_ratio > GAZE_DOWN_THRESHOLD:
+                gaze = "down"
+            elif vertical_ratio < GAZE_UP_THRESHOLD:
+                gaze = "up"
+            
+            return gaze, horizontal_ratio, vertical_ratio
+        except Exception as e:
+            logger.error(f"Gaze calculation error: {e}")
+            return "unknown", 0.5, 0.5
+
+    def calculate_head_pose(self, face_landmarks, frame_shape: tuple) -> tuple[float, float, float]:
+        """Estimate head pose (pitch, yaw, roll) using solvePnP."""
+        h, w = frame_shape[:2]
+        
+        required_indices = [1, 152, 33, 263, 61, 291]
+        max_index = max(required_indices)
+        
+        if len(face_landmarks.landmark) <= max_index:
+            logger = logging.getLogger("ProctoringEngine")
+            logger.error(f"Insufficient landmarks: {len(face_landmarks.landmark)} <= {max_index}")
+            return 0, 0, 0
+        
+        nose_tip = face_landmarks.landmark[1]
+        chin = face_landmarks.landmark[152]
+        left_eye = face_landmarks.landmark[33]
+        right_eye = face_landmarks.landmark[263]
+        left_mouth = face_landmarks.landmark[61]
+        right_mouth = face_landmarks.landmark[291]
+        
+        image_points = np.array([
+            (nose_tip.x * w, nose_tip.y * h),
+            (chin.x * w, chin.y * h),
+            (left_eye.x * w, left_eye.y * h),
+            (right_eye.x * w, right_eye.y * h),
+            (left_mouth.x * w, left_mouth.y * h),
+            (right_mouth.x * w, right_mouth.y * h)
+        ], dtype=np.float64)
+        
+        model_points = np.array([
+            (0.0, 0.0, 0.0),
+            (0.0, -330.0, -65.0),
+            (-225.0, 170.0, -135.0),
+            (225.0, 170.0, -135.0),
+            (-150.0, -150.0, -125.0),
+            (150.0, -150.0, -125.0)
+        ])
+        
+        focal_length = w
+        center = (w // 2, h // 2)
+        camera_matrix = np.array([
+            [focal_length, 0, center[0]],
+            [0, focal_length, center[1]],
+            [0, 0, 1]
+        ], dtype=np.float64)
+        
+        dist_coeffs = np.zeros((4, 1))
+        
+        success, rotation_vector, translation_vector = cv2.solvePnP(
+            model_points,
+            image_points,
+            camera_matrix,
+            dist_coeffs,
+            flags=cv2.SOLVEPNP_ITERATIVE
+        )
+        
+        if not success:
+            return 0, 0, 0
+        
+        rotation_matrix, _ = cv2.Rodrigues(rotation_vector)
+        angles, _, _, _, _, _ = cv2.RQDecomp3x3(rotation_matrix)
+        
+        pitch = angles[0]
+        yaw = angles[1]
+        roll = angles[2]
+        
+        return pitch, yaw, roll
+
+    def analyze_frame(self, frame: np.ndarray) -> tuple[list[str], dict]:
+        """Analyze a single frame for proctoring violations."""
+        violations = []
+        
+        face_count, landmarks = self.detect_faces(frame)
+        
+        if face_count == 0:
+            violations.append("user_left")
+            return violations, {"face_count": 0, "gaze": "unknown"}
+        
+        if face_count > 1:
+            violations.append("multiple_people")
+        
+        face_landmarks = landmarks[0]
+        
+        gaze, h_ratio, v_ratio = self.calculate_gaze_direction(face_landmarks, frame.shape)
+        
+        if gaze == "down":
+            violations.append("looking_down")
+        elif gaze in ["left", "right"]:
+            violations.append("looking_away")
+        
+        try:
+            pitch, yaw, roll = self.calculate_head_pose(face_landmarks, frame.shape)
+            
+            if pitch < HEAD_TILT_DOWN_THRESHOLD:
+                if "looking_down" not in violations:
+                    violations.append("head_tilted_down")
+        except (cv2.error, ValueError, IndexError) as e:
+            logger.debug(f"Head pose estimation failed: {e}")
+            pitch, yaw, roll = 0, 0, 0
+        
+        return violations, {
+            "face_count": face_count,
+            "gaze": gaze,
+            "head_pose": {"pitch": pitch, "yaw": yaw, "roll": roll}
+        }
+
+    def cleanup(self) -> None:
+        """Release MediaPipe resources."""
+        self.face_mesh.close()
+
+
+=== FILE: src\eyes\proctoring_monitor.py ===
+import cv2
+import threading
+import time
+import logging
+import numpy as np
+from collections import defaultdict
+from src.eyes.proctoring_engine import ProctoringEngine
+from config import settings
+
+logger = logging.getLogger("ProctoringMonitor")
+
+LOG_COOLDOWN_SECONDS = 5.0
+
+class ProctoringMonitor:
+    """Threaded webcam proctoring monitor with violation tracking."""
+
+    def __init__(self) -> None:
+        self.engine = ProctoringEngine()
+        self.is_running = False
+        self.thread = None
+        self.cap = None
+        self._lock = threading.Lock()
+        
+        self.violation_log = []
+        self.violation_counters = defaultdict(int)
+        
+        self.continuous_violation_tracker = {}
+        self._last_log_time: dict[str, float] = {}
+        self.threshold_seconds = settings.VIOLATION_THRESHOLD_SECONDS
+
+    def start(self) -> None:
+        """Start proctoring with user consent."""
+        if self.is_running:
+            return
+        
+        print("\n" + "="*60)
+        print("PROCTORING NOTICE:")
+        print("This interview session will use your webcam to monitor")
+        print("for violations such as looking away or multiple people.")
+        print("="*60)
+        consent = input("Do you consent to webcam proctoring? (yes/no): ").strip().lower()
+        
+        if consent not in ['yes', 'y']:
+            logger.info("User declined webcam proctoring")
+            print("[Proctoring] Skipped - User declined consent")
+            return
+        
+        try:
+            self.cap = cv2.VideoCapture(0)
+            if not self.cap.isOpened():
+                logger.error("Failed to open webcam")
+                return
+            
+            self.is_running = True
+            self.thread = threading.Thread(target=self._monitor_loop, daemon=True)
+            self.thread.start()
+            logger.info("Proctoring monitor started")
+        except Exception as e:
+            logger.error(f"Failed to start proctoring: {e}")
+    
+    def _monitor_loop(self):
+        fps = settings.PROCTORING_FPS
+        frame_interval = 1.0 / fps
+        
+        cv2.namedWindow("BeaverAI Proctoring", cv2.WINDOW_NORMAL)
+        cv2.resizeWindow("BeaverAI Proctoring", 640, 480)
+        
+        frame_count = 0
+        skip_frames = 2
+        prev_frame = None
+        motion_threshold = 5000
+        
+        while self.is_running:
+            try:
+                ret, frame = self.cap.read()
+                if not ret:
+                    time.sleep(frame_interval)
+                    continue
+                
+                frame_count += 1
+                
+                should_analyze = frame_count % (skip_frames + 1) == 0
+                
+                if prev_frame is not None and frame_count % 5 == 0:
+                    gray_current = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                    gray_prev = cv2.cvtColor(prev_frame, cv2.COLOR_BGR2GRAY)
+                    frame_diff = cv2.absdiff(gray_current, gray_prev)
+                    motion_score = np.sum(frame_diff)
+                    
+                    if motion_score < motion_threshold:
+                        should_analyze = False
+                
+                violations = []
+                metadata = {}
+                
+                if should_analyze:
+                    violations, metadata = self.engine.analyze_frame(frame)
+                
+                if frame_count % 5 == 0:
+                    prev_frame = frame.copy()
+                
+                display_frame = frame.copy()
+                
+                if metadata and 'gaze' in metadata:
+                    gaze_text = f"Gaze: {metadata['gaze']}"
+                    cv2.putText(display_frame, gaze_text, (10, 30), 
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                    
+                    if metadata.get('face_count', 0) > 0:
+                        cv2.putText(display_frame, f"Faces: {metadata['face_count']}", 
+                                   (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                
+                if violations:
+                    y_offset = 90
+                    for violation in violations:
+                        warning_text = violation.replace("_", " ").upper()
+                        cv2.putText(display_frame, f"WARNING: {warning_text}", 
+                                   (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 
+                                   0.6, (0, 0, 255), 2)
+                        y_offset += 30
+                
+                cv2.imshow("BeaverAI Proctoring", display_frame)
+                cv2.waitKey(1)
+                
+                current_time = time.time()
+                
+                for violation_type in violations:
+                    
+                    if violation_type not in self.continuous_violation_tracker:
+                       
+                        self._log_violation(violation_type, 0, is_sustained=False)
+                        self.continuous_violation_tracker[violation_type] = current_time
+                    else:
+                        
+                        duration = current_time - self.continuous_violation_tracker[violation_type]
+                        
+                        if duration >= self.threshold_seconds:
+                            
+                            self._log_violation(violation_type, duration, is_sustained=True)
+                            self.continuous_violation_tracker[violation_type] = current_time
+                
+                active_violations = set(violations)
+                for vtype in list(self.continuous_violation_tracker.keys()):
+                    if vtype not in active_violations:
+                        del self.continuous_violation_tracker[vtype]
+                
+                time.sleep(frame_interval)
+                
+            except Exception as e:
+                logger.error(f"Proctoring loop error: {e}")
+                time.sleep(frame_interval)
+        
+        cv2.destroyAllWindows()
+    
+    def _log_violation(self, violation_type, duration, is_sustained=False):
+        now = time.time()
+
+        # Cooldown: skip logging if same type was logged within LOG_COOLDOWN_SECONDS
+        last_time = self._last_log_time.get(violation_type, 0)
+        if not is_sustained and (now - last_time) < LOG_COOLDOWN_SECONDS:
+            return
+
+        with self._lock:
+            self.violation_counters[violation_type] += 1
+            self._last_log_time[violation_type] = now
+            
+            log_entry = {
+                "type": violation_type,
+                "timestamp": now,
+                "duration": round(duration, 2),
+                "sustained": is_sustained
+            }
+            self.violation_log.append(log_entry)
+        
+        if is_sustained:
+            logger.warning(f"Sustained violation: {violation_type} for {duration:.1f}s")
+        else:
+            logger.debug(f"Violation detected: {violation_type}")
+    
+    def get_violations_summary(self) -> dict:
+        """Return summary of all violations with severity rating."""
+        total_violations = sum(self.violation_counters.values())
+
+        severity = "low"
+        if total_violations > 10:
+            severity = "high"
+        elif total_violations > 5:
+            severity = "medium"
+
+        return {
+            "total_violations": total_violations,
+            "violation_counts": self.violation_counters.copy(),
+            "violation_log": self.violation_log.copy(),
+            "severity": severity,
+        }
+    
+    def stop(self) -> None:
+        """Stop the proctoring monitor and release resources."""
+        if not self.is_running:
+            return
+
+        self.is_running = False
+
+        try:
+            if self.thread:
+                self.thread.join(timeout=3)
+        except (KeyboardInterrupt, OSError):
+            pass
+
+        try:
+            if self.cap:
+                self.cap.release()
+        except (cv2.error, OSError) as e:
+            logger.warning(f"Failed to release webcam: {e}")
+
+        try:
+            self.engine.cleanup()
+        except (AttributeError, RuntimeError) as e:
+            logger.warning(f"Failed to cleanup proctoring engine: {e}")
+
+        try:
+            cv2.destroyAllWindows()
+        except Exception:
+            pass
+
+        logger.info("Proctoring monitor stopped")
+
+
+=== FILE: src\eyes\__init__.py ===
+from src.eyes.proctoring_engine import ProctoringEngine
+from src.eyes.proctoring_monitor import ProctoringMonitor
+
+__all__ = ["ProctoringEngine", "ProctoringMonitor"]
+
+
+=== FILE: src\voice\tts_coqui.py ===
+from TTS.api import TTS
+import numpy as np
+import sounddevice as sd
+import logging
+from pathlib import Path
+from config import settings
+
+logger = logging.getLogger("CoquiTTS")
+
+class CoquiTTSEngine:
+    def __init__(self):
+        try:
+            logger.info("Loading Coqui XTTS v2 model...")
+            self.tts = TTS("tts_models/multilingual/multi-dataset/xtts_v2")
+            
+            if settings.VOICE_CLONE_SAMPLE and hasattr(settings.VOICE_CLONE_SAMPLE, 'exists'):
+                voice_sample = Path(settings.VOICE_CLONE_SAMPLE)
+                if voice_sample.exists():
+                    self.speaker_wav = str(voice_sample)
+                    logger.info(f"Using voice clone sample: {self.speaker_wav}")
+                else:
+                    self.speaker_wav = None
+                    logger.warning("Voice clone sample not found, using default voice")
+            else:
+                self.speaker_wav = None
+                logger.warning("Voice clone sample not configured")
+            
+            self.sample_rate = 24000
+            logger.info("Coqui TTS loaded successfully")
+        except Exception as e:
+            logger.error(f"Failed to load Coqui TTS: {e}")
+            raise
+    
+    def speak(self, text, language="en"):
+        try:
+            if self.speaker_wav:
+                wav = self.tts.tts(
+                    text=text,
+                    speaker_wav=self.speaker_wav,
+                    language=language
+                )
+            else:
+                wav = self.tts.tts(text=text, language=language)
+            
+            wav_array = np.array(wav, dtype=np.float32)
+            
+            sd.play(wav_array, self.sample_rate)
+            sd.wait()
+            
+            return wav_array
+        except Exception as e:
+            logger.error(f"TTS generation failed: {e}")
+            return None
+    
+    def speak_stream(self, text_chunks, language="en"):
+        for chunk in text_chunks:
+            if isinstance(chunk, str):
+                self.speak(chunk, language)
+            else:
+                for subchunk in chunk:
+                    self.speak(subchunk, language)
+
+
+=== FILE: src\voice\tts_engine.py ===
+"""TTS Engine — edge-tts (primary) with piper-tts (offline fallback).
+
+Uses Microsoft Edge's neural TTS voices via edge_tts library (free, no API key).
+Falls back to Piper TTS for offline use when internet is unavailable.
+"""
+import asyncio
+import io
+import logging
+import os
+import tempfile
+import time
+import wave
+from pathlib import Path
+from typing import Generator
+
+import numpy as np
+import sounddevice as sd
+import soundfile as sf
+
+from config import settings
+
+logger = logging.getLogger("TTSEngine")
+
+# Edge-TTS voice selection
+EDGE_VOICE = "en-US-GuyNeural"
+EDGE_VOICE_FALLBACKS = ["en-US-ChristopherNeural", "en-US-EricNeural", "en-US-AndrewNeural"]
+
+# Piper model config
+PIPER_MODEL_PATH = settings.TTS_MODEL_PATH
+
+# Attempt imports
+_edge_tts_available = False
+try:
+    import edge_tts
+    _edge_tts_available = True
+except ImportError:
+    logger.warning("edge-tts not installed. Install with: pip install edge-tts")
+
+_piper_available = False
+try:
+    from piper import PiperVoice
+    _piper_available = True
+except ImportError:
+    logger.warning("piper-tts not installed. Install with: pip install piper-tts")
+
+
+class TTSEngine:
+    """Text-to-Speech engine with edge-tts (online) and piper (offline) backends."""
+
+    def __init__(self, vad_module=None) -> None:
+        self.vad = vad_module
+        self._piper_voice = None
+        self._edge_failed_count = 0
+        self._max_edge_failures = 5
+
+        # Ensure temp directory exists
+        self._temp_dir = settings.BASE_DIR / "data" / "temp"
+        self._temp_dir.mkdir(parents=True, exist_ok=True)
+
+        # Create or get event loop for async edge-tts
+        try:
+            self._loop = asyncio.new_event_loop()
+        except Exception:
+            self._loop = asyncio.get_event_loop()
+
+        logger.info(f"TTS Engine initialized (edge-tts: {_edge_tts_available}, piper: {_piper_available})")
+
+    def _get_piper_voice(self):
+        """Lazy-load Piper voice model."""
+        if self._piper_voice is None and _piper_available:
+            model_path = PIPER_MODEL_PATH
+            if model_path.exists():
+                try:
+                    self._piper_voice = PiperVoice.load(str(model_path))
+                    logger.info(f"Piper voice loaded: {model_path.name}")
+                except Exception as e:
+                    logger.error(f"Failed to load Piper voice: {e}")
+            else:
+                logger.warning(f"Piper model not found at: {model_path}")
+        return self._piper_voice
+
+    # ── Public API ────────────────────────────────────────────────
+
+    def speak_text(self, text: str) -> None:
+        """Speak a single text string synchronously."""
+        print(f"\n[BeaverAI]: {text}")
+        self._synthesize_and_play(text)
+
+    def speak_stream(self, text_generator: Generator) -> None:
+        """Collect streamed text, print it, then speak the full result."""
+        collected = []
+
+        print("\n[BeaverAI]:", end=" ", flush=True)
+
+        for sentence in text_generator:
+            if not sentence or not sentence.strip():
+                continue
+            print(sentence, end=" ", flush=True)
+            collected.append(sentence)
+
+        print()
+
+        full_text = " ".join(collected).strip()
+        if full_text:
+            self._synthesize_and_play(full_text)
+
+        return None
+
+    # ── Core Synthesis ────────────────────────────────────────────
+
+    def _synthesize_and_play(self, text: str) -> None:
+        """Try edge-tts, fall back to piper, play audio."""
+        if not text.strip():
+            return
+
+        try:
+            if self.vad:
+                self.vad.set_mode('speaking')
+
+            audio_path = None
+
+            # Primary: edge-tts (online, neural quality)
+            if _edge_tts_available and self._edge_failed_count < self._max_edge_failures:
+                audio_path = self._synthesize_edge(text)
+                if not audio_path:
+                    self._edge_failed_count += 1
+                    logger.warning(f"edge-tts failed ({self._edge_failed_count}/{self._max_edge_failures})")
+
+            # Fallback: piper (offline, still good quality)
+            if not audio_path and _piper_available:
+                audio_path = self._synthesize_piper(text)
+
+            # Play audio
+            if audio_path and os.path.exists(audio_path):
+                self._play_audio(audio_path)
+                try:
+                    os.remove(audio_path)
+                except OSError:
+                    pass
+            else:
+                logger.debug("No TTS audio generated, continuing silently")
+
+        except Exception as e:
+            logger.error(f"TTS error: {e}")
+        finally:
+            if self.vad:
+                self.vad.set_mode('listening')
+
+    def _synthesize_edge(self, text: str) -> str | None:
+        """Generate audio using edge-tts (Microsoft neural voices)."""
+        timestamp = int(time.time() * 1000000)
+        output_path = str(self._temp_dir / f"tts_{timestamp}.mp3")
+
+        try:
+            async def _generate():
+                communicate = edge_tts.Communicate(text, EDGE_VOICE)
+                await communicate.save(output_path)
+
+            self._loop.run_until_complete(_generate())
+
+            if os.path.exists(output_path) and os.path.getsize(output_path) > 100:
+                logger.debug(f"edge-tts generated {os.path.getsize(output_path)}b")
+                return output_path
+
+        except Exception as e:
+            logger.warning(f"edge-tts synthesis failed: {e}")
+            # Try cleanup
+            try:
+                if os.path.exists(output_path):
+                    os.remove(output_path)
+            except OSError:
+                pass
+
+        return None
+
+    def _synthesize_piper(self, text: str) -> str | None:
+        """Generate audio using Piper TTS (offline neural)."""
+        voice = self._get_piper_voice()
+        if not voice:
+            return None
+
+        timestamp = int(time.time() * 1000000)
+        output_path = str(self._temp_dir / f"tts_{timestamp}.wav")
+
+        try:
+            # Piper outputs raw PCM, write to WAV
+            audio_bytes = io.BytesIO()
+            with wave.open(audio_bytes, 'wb') as wav_file:
+                wav_file.setnchannels(1)
+                wav_file.setsampwidth(2)  # 16-bit
+                wav_file.setframerate(voice.config.sample_rate)
+
+                for audio_chunk in voice.synthesize_stream_raw(text):
+                    wav_file.writeframes(audio_chunk)
+
+            with open(output_path, 'wb') as f:
+                f.write(audio_bytes.getvalue())
+
+            if os.path.exists(output_path) and os.path.getsize(output_path) > 100:
+                logger.debug(f"piper generated {os.path.getsize(output_path)}b")
+                return output_path
+
+        except Exception as e:
+            logger.warning(f"Piper synthesis failed: {e}")
+            try:
+                if os.path.exists(output_path):
+                    os.remove(output_path)
+            except OSError:
+                pass
+
+        return None
+
+    def _play_audio(self, file_path: str) -> None:
+        """Play an audio file (MP3 or WAV) through speakers."""
+        try:
+            data, samplerate = sf.read(file_path, dtype='float32')
+            sd.play(data, samplerate=samplerate)
+            sd.wait()
+        except Exception as e:
+            logger.warning(f"Audio playback failed: {e}")
+
+=== FILE: src\voice\tts_worker.py ===
+"""TTS Worker subprocess — receives text via stdin, generates WAV files via pyttsx3."""
+import sys
+import os
+import pyttsx3
+from pathlib import Path
+
+# Project root for path validation
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+ALLOWED_TEMP_DIR = PROJECT_ROOT / "data" / "temp"
+
+
+def _is_safe_path(filepath: str) -> bool:
+    """Validate that the filepath is within the project's temp directory."""
+    try:
+        resolved = Path(filepath).resolve()
+        return str(resolved).startswith(str(ALLOWED_TEMP_DIR.resolve()))
+    except (ValueError, OSError):
+        return False
+
+
+def main():
+    try:
+        engine = pyttsx3.init()
+        engine.setProperty('rate', 190)
+        # Try to set a natural-sounding voice
+        voices = engine.getProperty('voices')
+        for voice in voices:
+            if 'david' in voice.name.lower() or 'mark' in voice.name.lower():
+                engine.setProperty('voice', voice.id)
+                break
+    except Exception as e:
+        sys.stderr.write(f"ERROR: Failed to init TTS: {e}\n")
+        sys.stderr.flush()
+        return
+
+    sys.stderr.write("READY\n")
+    sys.stderr.flush()
+
+    while True:
+        try:
+            line = sys.stdin.readline()
+            if not line:
+                break
+
+            data = line.strip()
+            if "|" not in data:
+                sys.stdout.write("SKIP\n")
+                sys.stdout.flush()
+                continue
+
+            filepath, text = data.split("|", 1)
+
+            if not text.strip():
+                sys.stdout.write("SKIP\n")
+                sys.stdout.flush()
+                continue
+
+            # Validate path is within project temp directory
+            if not filepath or '..' in filepath or not _is_safe_path(filepath):
+                sys.stderr.write(f"WARN: Rejected path: {filepath}\n")
+                sys.stderr.flush()
+                sys.stdout.write("SKIP\n")
+                sys.stdout.flush()
+                continue
+
+            safe_path = Path(filepath).resolve()
+            safe_path.parent.mkdir(parents=True, exist_ok=True)
+
+            try:
+                engine.save_to_file(text, str(safe_path))
+                engine.runAndWait()
+
+                if safe_path.exists() and safe_path.stat().st_size > 0:
+                    sys.stderr.write(f"OK: Generated {safe_path.stat().st_size}b -> {safe_path.name}\n")
+                    sys.stderr.flush()
+                    sys.stdout.write("DONE\n")
+                else:
+                    sys.stderr.write(f"WARN: File not created at {safe_path}\n")
+                    sys.stderr.flush()
+                    sys.stdout.write("FAIL\n")
+            except Exception as e:
+                sys.stderr.write(f"ERROR: Synthesis failed: {e}\n")
+                sys.stderr.flush()
+                sys.stdout.write("FAIL\n")
+
+            sys.stdout.flush()
+
+        except Exception as e:
+            sys.stderr.write(f"ERROR: {e}\n")
+            sys.stderr.flush()
+            sys.stdout.write("ERROR\n")
+            sys.stdout.flush()
+
+
+if __name__ == "__main__":
+    main()
+
+=== FILE: src\voice\__init__.py ===
+from src.voice.tts_engine import TTSEngine
+
+__all__ = ["TTSEngine"]

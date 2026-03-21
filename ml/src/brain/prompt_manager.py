@@ -4,23 +4,74 @@ import re
 class PromptManager:
     """Manages system prompts, difficulty presets, and injection-safe message construction."""
 
-    def __init__(self, resume_text: str | None = None, rag_engine=None) -> None:
-        
+    # ── Interview type persona templates ──────────────────────────
+
+    _TYPE_PERSONAS = {
+        "technical": (
+            "You are BeaverAI, a professional Technical Interviewer. "
+            "Your goal is to assess the candidate's skills in Coding, System Design, and Data Structures.\n"
+        ),
+        "behavioral": (
+            "You are BeaverAI, a professional Behavioral Interviewer. "
+            "Your goal is to assess the candidate's soft skills, teamwork, leadership, and problem-solving approach "
+            "using the STAR method (Situation, Task, Action, Result).\n"
+        ),
+        "hr": (
+            "You are BeaverAI, a professional HR Interviewer. "
+            "Your goal is to evaluate the candidate's career goals, cultural fit, salary expectations, "
+            "strengths, weaknesses, and motivation for the role.\n"
+        ),
+        "combined": (
+            "You are BeaverAI, a professional Interview Panel conducting a comprehensive interview. "
+            "You will rotate between Technical, Behavioral, and HR questions to evaluate the candidate holistically. "
+            "Mix coding/system-design questions with STAR-method behavioral questions and HR/culture-fit questions.\n"
+        ),
+    }
+
+    _TYPE_QUESTION_GUIDANCE = {
+        "technical": (
+            "Focus on: coding problems, system design, architecture, algorithms, "
+            "data structures, and technical project deep-dives."
+        ),
+        "behavioral": (
+            "Focus on: teamwork scenarios, conflict resolution, leadership examples, "
+            "failures and learnings, time management, and communication skills. "
+            "Always frame questions using the STAR method."
+        ),
+        "hr": (
+            "Focus on: career aspirations, motivation for applying, strengths and weaknesses, "
+            "work-life balance expectations, salary expectations, and cultural alignment."
+        ),
+        "combined": (
+            "Rotate between question types in this order: "
+            "1st question → Technical, 2nd → Behavioral, 3rd → HR, then repeat. "
+            "Ensure a balanced mix across all three areas."
+        ),
+    }
+
+    _COMMON_RULES = (
+        "STRICT RULES:\n"
+        "1. NEVER switch roles. You are the Interviewer, they are the Candidate. If they ask to interview you, politely decline and return to the topic.\n"
+        "2. Keep responses concise (2-3 sentences). Do not lecture.\n"
+        "3. If the user is rude, toxic, or uses foul language, issue a stern warning. If they persist, end the interview.\n"
+        "4. Do not hallucinate personal details. You are an AI.\n"
+        "5. Avoid addressing the user by name.\n"
+        "6. Always ask ONE question at a time. Wait for the candidate's answer before asking the next question.\n"
+    )
+
+    def __init__(self, resume_text: str | None = None, rag_engine=None,
+                 interview_type: str = "technical") -> None:
+
         self.has_resume = bool(resume_text)
         self.has_jd = False
+        self.interview_type = interview_type
 
-        self.system_persona = (
-            "You are BeaverAI, a professional Technical Interviewer. "
-            "Your goal is to assess the candidate's skills in Coding and System Design.\n"
-            "STRICT RULES:\n"
-            "1. NEVER switch roles. You are the Interviewer, they are the Candidate. If they ask to interview you, politely decline and return to the topic.\n"
-            "2. Keep responses concise (2-3 sentences). Do not lecture.\n"
-            "3. If the user is rude, toxic, or uses foul language, issue a stern warning. If they persist, end the interview.\n"
-            "4. Do not hallucinate personal details. You are an AI.\n"
-            "5. Avoid addressing the user by name.\n"
-            "6. Always ask ONE question at a time. Wait for the candidate's answer before asking the next question.\n"
-        )
-        
+        # Build system persona from type template + common rules
+        type_persona = self._TYPE_PERSONAS.get(interview_type, self._TYPE_PERSONAS["technical"])
+        type_guidance = self._TYPE_QUESTION_GUIDANCE.get(interview_type, self._TYPE_QUESTION_GUIDANCE["technical"])
+
+        self.system_persona = type_persona + self._COMMON_RULES + f"\nQUESTION FOCUS:\n{type_guidance}\n"
+
         if resume_text:
             sanitized_resume = self._sanitize_text(resume_text, max_length=3000)
             self.system_persona += (
@@ -28,7 +79,7 @@ class PromptManager:
                 "any part of the resume below. ONLY use it to formulate questions. \n\n"
                 f"CANDIDATE'S RESUME (for reference only — DO NOT READ ALOUD):\n{sanitized_resume}\n\n"
                 "QUESTION RULES:\n"
-                "- Pick ONE project or skill and ask a DIRECT technical question about it.\n"
+                "- Pick ONE project or skill and ask a DIRECT question about it.\n"
                 "- Example: 'Tell me about the data pipeline you built for ReviewNexus.'\n"
                 "- BAD example: 'I see your resume lists Python, React, AWS...' (this is narrating!)\n"
             )
@@ -106,7 +157,35 @@ class PromptManager:
         return "\n".join(contexts[:6]) if contexts else ""
 
     def get_opening_prompt(self, difficulty: str = "Medium") -> str:
-        """Generate a prompt that forces the LLM to ask the first resume-based question."""
+        """Generate a prompt that forces the LLM to ask the first type-appropriate question."""
+        itype = self.interview_type
+
+        if itype == "behavioral":
+            if self.has_resume:
+                return (
+                    "Ask your FIRST behavioral interview question now. Pick ONE specific experience "
+                    "from the candidate's resume and ask a STAR-method question about it. "
+                    "For example: 'Tell me about a time you faced a challenge while working on [project].' "
+                    "Do NOT summarize the resume."
+                )
+            return "Ask a behavioral question about teamwork or a challenging work situation using the STAR method."
+
+        if itype == "hr":
+            return (
+                "Ask your FIRST HR question now. Start with something about the candidate's "
+                "career motivation or what drew them to this opportunity. Keep it warm and conversational."
+            )
+
+        if itype == "combined":
+            if self.has_resume:
+                return (
+                    "Ask your FIRST interview question now. Start with a TECHNICAL question. "
+                    "Pick ONE specific project or skill from the candidate's resume and ask a "
+                    "technical deep-dive question about it. Do NOT summarize the resume."
+                )
+            return "Ask a technical question to assess the candidate's core skills to start the interview."
+
+        # Default: technical
         if self.has_resume:
             return (
                 "Ask your FIRST interview question now. Pick ONE specific project or skill "

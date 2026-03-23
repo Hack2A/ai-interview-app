@@ -67,8 +67,17 @@ class ATSChecker:
     def extract_skills(self, text: str) -> frozenset:
         if not text:
             return frozenset()
-        text_lower = text.lower()
-        return frozenset(skill for skill in self.tech_skills if skill in text_lower)
+        
+        try:
+            from src.core.skill_ontology import SkillOntology
+            ontology = SkillOntology()
+            skills_found = ontology.extract_skills(text)
+            # Use original skill name rather than standardized to match downstream expectations, or standardized if preferred
+            return frozenset([s["skill"] for s in skills_found])
+        except Exception as e:
+            logger.warning(f"Skill extraction failed, using fallback: {e}")
+            text_lower = text.lower()
+            return frozenset(skill for skill in self.tech_skills if skill in text_lower)
 
     @lru_cache(maxsize=128)
     def extract_keywords(self, text: str) -> frozenset:
@@ -106,13 +115,30 @@ class ATSChecker:
         except (ValueError, ZeroDivisionError):
             return 0.0
 
-    def calculate_semantic_similarity(self, resume_text: str, jd_text: str) -> float:
-        if not resume_text or not jd_text:
+    def calculate_semantic_similarity(self, resume_parsed: dict, jd_parsed: dict) -> float:
+        """Compare specific sections (e.g. experience to responsibilities) rather than whole documents."""
+        # Use targeted sections for comparison
+        resume_target = resume_parsed.get("experience", "")
+        if len(resume_target.strip()) < 50:
+            resume_target = resume_parsed.get("summary", "")
+            
+        jd_target = jd_parsed.get("responsibilities", "") + " " + jd_parsed.get("requirements", "")
+        
+        if len(resume_target.strip()) < 50:
+            # Fall back to raw text comparison if parsing failed
+            resume_target = " ".join(resume_parsed.values())
+        if len(jd_target.strip()) < 50:
+            jd_target = " ".join(jd_parsed.values())
+
+        if not resume_target or not jd_target:
             return 0.0
-        resume_sentences = [s.strip() for s in resume_text.split('.') if len(s.strip()) > 20]
-        jd_sentences = [s.strip() for s in jd_text.split('.') if len(s.strip()) > 20]
+
+        resume_sentences = [s.strip() for s in resume_target.split('.') if len(s.strip()) > 20]
+        jd_sentences = [s.strip() for s in jd_target.split('.') if len(s.strip()) > 20]
+        
         if not resume_sentences or not jd_sentences:
             return 0.0
+            
         resume_embeddings = self.semantic_model.encode(
             resume_sentences, batch_size=32, convert_to_tensor=False, show_progress_bar=False
         )
@@ -122,6 +148,30 @@ class ATSChecker:
         similarities = cosine_similarity(resume_embeddings, jd_embeddings)
         max_similarities = np.max(similarities, axis=1)
         return round(np.mean(max_similarities) * 100, 2)
+
+    def calculate_experience_score(self, resume_parsed: dict, jd_parsed: dict) -> float:
+        """Evaluate if the candidate's years of experience meet the JD requirements."""
+        resume_exp_str = resume_parsed.get("years_of_experience", "0")
+        jd_exp_str = jd_parsed.get("experience", "0")
+        
+        try:
+            res_match = re.search(r'\d+', str(resume_exp_str))
+            res_years = float(res_match.group()) if res_match else 0.0
+            
+            jd_match = re.search(r'\d+', str(jd_exp_str))
+            jd_years = float(jd_match.group()) if jd_match else 0.0
+            
+            if jd_years == 0:
+                return 100.0  # No specific requirement found, assume match
+                
+            if res_years >= jd_years:
+                return 100.0
+                
+            # Partial score if they have some experience
+            return min(100.0, max(0.0, (res_years / jd_years) * 100))
+        except Exception as e:
+            logger.warning(f"Error extracting experience: {e}")
+            return 50.0
 
     def calculate_skill_match(self, resume_skills: frozenset, jd_skills: frozenset) -> float:
         if not jd_skills:
@@ -237,10 +287,14 @@ class ATSChecker:
 
     # ── LLM Intelligent Score ─────────────────────────────────────
 
-    def llm_intelligent_score(self, resume_text: str, jd_text: str) -> dict | None:
-        if not self.llm_model or not resume_text or not jd_text:
+    def llm_intelligent_score(self, resume_parsed: dict, jd_parsed: dict) -> dict | None:
+        if not self.llm_model or not resume_parsed or not jd_parsed:
             return None
 
+        # We'll use raw text fallback for cache key to ensure consistency
+        resume_text = " ".join(str(v) for v in resume_parsed.values())
+        jd_text = " ".join(str(v) for v in jd_parsed.values())
+        
         cached_result = self.cache.get_llm_cache(resume_text, jd_text)
         if cached_result:
             return cached_result
@@ -249,16 +303,21 @@ class ATSChecker:
             prompt = f"""You are an expert ATS (Applicant Tracking System) and recruitment specialist. Analyze how well this resume matches the job description.
 
 JOB DESCRIPTION:
-{jd_text[:2000]}
+Requirements: {str(jd_parsed.get('requirements', ''))[:1000]}
+Responsibilities: {str(jd_parsed.get('responsibilities', ''))[:1000]}
+Experience: {str(jd_parsed.get('experience', ''))[:500]}
 
 RESUME:
-{resume_text[:2000]}
+Summary: {str(resume_parsed.get('summary', ''))[:500]}
+Experience: {str(resume_parsed.get('experience', ''))[:1500]}
+Skills: {str(resume_parsed.get('skills', ''))[:1000]}
+Education: {str(resume_parsed.get('education', ''))[:500]}
 
 Provide a detailed analysis in JSON format with:
-1. match_score: A score from 0-100 indicating overall match quality
-2. strengths: List of 3-5 key strengths where the candidate matches well
-3. gaps: List of 3-5 areas where the candidate could improve or is missing requirements
-4. reasoning: Brief explanation of the score
+1. match_score: A score from 0-100 indicating overall match quality, strictly evaluating required experience and core skills.
+2. strengths: List of 3-5 key strengths where the candidate matches well.
+3. gaps: List of 3-5 areas where the candidate could improve or is missing requirements (e.g. skill gaps, lack of years of experience).
+4. reasoning: Brief explanation of the score, focusing on role fit and impact.
 
 Respond ONLY with valid JSON, no other text."""
 
@@ -311,8 +370,21 @@ Respond ONLY with valid JSON, no other text."""
 
     # ── Main Analysis ─────────────────────────────────────────────
 
-    def analyze(self, resume_text: str, jd_text: str) -> dict:
+    def analyze(self, resume_input, jd_input) -> dict:
         """Run full ATS analysis — algorithmic + LLM + spelling + formatting."""
+
+        # 1. Parse Inputs safely
+        if hasattr(resume_input, 'raw_text'):
+            resume_text = resume_input.raw_text
+            resume_parsed = resume_input.parsed_sections
+        else:
+            resume_text = str(resume_input)
+            from src.core.resume_parser import ResumeParser
+            resume_parsed = ResumeParser().parse(resume_text)
+            
+        jd_text = str(jd_input)
+        from src.core.jd_parser import jd_parser
+        jd_parsed = jd_parser.parse(jd_text)
 
         # Phase 1: Extract features in parallel
         with ThreadPoolExecutor(max_workers=4) as executor:
@@ -330,7 +402,8 @@ Respond ONLY with valid JSON, no other text."""
         futures = {}
         with ThreadPoolExecutor(max_workers=6) as executor:
             futures['tfidf'] = executor.submit(self.calculate_tfidf_similarity, resume_text, jd_text)
-            futures['semantic'] = executor.submit(self.calculate_semantic_similarity, resume_text, jd_text)
+            futures['semantic'] = executor.submit(self.calculate_semantic_similarity, resume_parsed, jd_parsed)
+            futures['experience'] = executor.submit(self.calculate_experience_score, resume_parsed, jd_parsed)
             futures['skill'] = executor.submit(self.calculate_skill_match, resume_skills, jd_skills)
             futures['keyword'] = executor.submit(self.calculate_keyword_match, resume_keywords, jd_keywords)
             futures['fuzzy'] = executor.submit(self.fuzzy_match_score, resume_text, jd_text)
@@ -339,6 +412,7 @@ Respond ONLY with valid JSON, no other text."""
 
             tfidf_score = futures['tfidf'].result()
             semantic_score = futures['semantic'].result()
+            experience_score = futures['experience'].result()
             skill_match_score = futures['skill'].result()
             keyword_match_score = futures['keyword'].result()
             fuzzy_score = futures['fuzzy'].result()
@@ -347,10 +421,11 @@ Respond ONLY with valid JSON, no other text."""
 
         # Algorithmic score (weighted average, then apply quality penalties)
         raw_algo_score = (
-            tfidf_score * 0.20
-            + semantic_score * 0.45
+            semantic_score * 0.35
             + skill_match_score * 0.20
-            + keyword_match_score * 0.10
+            + experience_score * 0.15
+            + tfidf_score * 0.20
+            + keyword_match_score * 0.05
             + fuzzy_score * 0.05
         )
         algo_score = max(0, raw_algo_score - spelling_result["score_penalty"] - formatting_result["score_penalty"])
@@ -359,12 +434,13 @@ Respond ONLY with valid JSON, no other text."""
         gap_info = self.gap_analysis(resume_keywords, jd_keywords, resume_skills, jd_skills)
 
         # LLM analysis
-        llm_analysis = self.llm_intelligent_score(resume_text, jd_text)
-        llm_score = llm_analysis["llm_score"] if llm_analysis else None
+        llm_analysis = self.llm_intelligent_score(resume_parsed, jd_parsed)
+        llm_score = llm_analysis["llm_score"] if llm_analysis and "llm_score" in llm_analysis else None
 
-        # Combined score
+        # Combined score (weighted fusion)
         if llm_score is not None:
-            combined_score = round((algo_score + llm_score) / 2, 2)
+            # 60% LLM (more reliable for actual fit) / 40% Algorithmic (good for strict keyword matching)
+            combined_score = round((algo_score * 0.4) + (float(llm_score) * 0.6), 2)
         else:
             combined_score = round(algo_score, 2)
 
@@ -377,6 +453,7 @@ Respond ONLY with valid JSON, no other text."""
             "tfidf_score": tfidf_score,
             "semantic_score": semantic_score,
             "skill_match_score": round(skill_match_score, 2),
+            "experience_score": round(experience_score, 2),
             "keyword_match_score": round(keyword_match_score, 2),
             # Quality checks
             "spelling": spelling_result,

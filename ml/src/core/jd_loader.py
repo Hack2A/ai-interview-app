@@ -77,6 +77,53 @@ class JDLoader:
             text = f.read()
         return " ".join(text.split())
     
+    def load_from_path(self, file_path):
+        """Load JD from an arbitrary file path (PDF or TXT).
+
+        Args:
+            file_path: Path object or string pointing to a .pdf or .txt file.
+
+        Returns:
+            Extracted text, or None on failure.
+        """
+        file_path = Path(file_path)
+        if not file_path.is_file():
+            print(f"[JDLoader] File not found: {file_path}")
+            return None
+
+        try:
+            if file_path.suffix.lower() == ".pdf":
+                reader = PdfReader(file_path)
+                text = ""
+                for page in reader.pages:
+                    page_text = page.extract_text()
+                    if page_text:
+                        text += page_text + "\n"
+                return " ".join(text.split()) if text.strip() else None
+            elif file_path.suffix.lower() == ".txt":
+                with open(file_path, "r", encoding="utf-8") as f:
+                    text = f.read()
+                return " ".join(text.split()) if text.strip() else None
+            else:
+                print(f"[JDLoader] Unsupported file type: {file_path.suffix}")
+                return None
+        except Exception as e:
+            print(f"[JDLoader] Error reading file: {e}")
+            return None
+
+    def load_from_text(self, text):
+        """Normalize raw text input as a JD.
+
+        Args:
+            text: Raw job description text.
+
+        Returns:
+            Normalized text string, or None if empty.
+        """
+        if not text or not text.strip():
+            return None
+        return " ".join(text.split())
+
     def chunk_text(self, text, chunk_size=150, overlap=50):
         """Split text into overlapping word-level chunks."""
         if not text:

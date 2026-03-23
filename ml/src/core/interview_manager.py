@@ -47,27 +47,20 @@ class InterviewManager:
         self.state = SessionState()
 
         self.resume_loader = ResumeLoader()
-        resume_text = self.resume_loader.load_resume()
+        self.resume_text = self.resume_loader.load_resume()
 
+        # JD loading is deferred until curated mode is selected
         self.jd_loader = JDLoader() if settings.ENABLE_RAG else None
-        jd_text = self.jd_loader.load_jd() if self.jd_loader else None
+        self.jd_text = None
 
         self._sentiment_analyzer = None
         self._proctoring = None
         self._ats_checker = None
 
-        with ThreadPoolExecutor(max_workers=3) as executor:
-            future_rag = None
-            if settings.ENABLE_RAG and jd_text:
-                future_rag = executor.submit(RAGEngine, jd_text=jd_text)
-
-            future_brain = executor.submit(LLMEngine, resume_text=resume_text, rag_engine=None)
+        # Pre-init audio engines (these don't depend on interview config)
+        with ThreadPoolExecutor(max_workers=2) as executor:
             future_ears = executor.submit(STTEngine)
             future_recorder = executor.submit(VoiceRecorder)
-
-            self.rag_engine = future_rag.result() if future_rag else None
-            self.brain = future_brain.result()
-            self.brain.prompt_manager.rag_engine = self.rag_engine
             self.ears = future_ears.result()
             self.recorder = future_recorder.result()
 
@@ -81,7 +74,10 @@ class InterviewManager:
         else:
             self.voice_engine = TTSEngine(vad_module=self.recorder)
 
-        self.evaluator = Evaluator(settings.LLM_MODEL_PATH)
+        # LLM, RAG, and evaluator are initialized after session config
+        self.brain = None
+        self.rag_engine = None
+        self.evaluator = None
 
         self.next_turn_audio = None
         self.audio_responses = []
@@ -124,7 +120,8 @@ class InterviewManager:
     @property
     def ats_checker(self):
         if self._ats_checker is None and settings.ENABLE_ATS:
-            self._ats_checker = ATSChecker(llm_model=self.brain.llm)
+            llm = self.brain.llm if self.brain else None
+            self._ats_checker = ATSChecker(llm_model=llm)
         return self._ats_checker
 
     # ── ATS Check ─────────────────────────────────────────────────
@@ -215,27 +212,130 @@ class InterviewManager:
     def _configure_session(self):
         print("\n" + "=" * 40 + "\n      BEAVER AI - SESSION SETUP\n" + "=" * 40)
 
-        if self.ats_checker and self.jd_loader:
-            resume_text = self.resume_loader.load_resume()
-            jd_text = self.jd_loader.load_jd()
-            if resume_text and jd_text:
-                if not self._run_ats_check(resume_text, jd_text):
+        # ── Step 1: Interview Mode ──
+        print("\nSelect interview mode:")
+        print(" [1] Generic  — General interview without a specific job description")
+        print(" [2] Curated  — Tailored interview based on a job description")
+        mode_choice = input("\nEnter choice (1-2) [Default: 1]: ").strip()
+
+        if mode_choice == "2":
+            self.state.interview_mode = "curated"
+            self.jd_text = self._load_jd_interactive()
+
+            # Init brain early so LLM is available for ATS analysis
+            self._init_brain()
+
+            # Run ATS check immediately after JD is loaded
+            if self.ats_checker and self.resume_text and self.jd_text:
+                if not self._run_ats_check(self.resume_text, self.jd_text):
                     return False
+        else:
+            self.state.interview_mode = "generic"
+            self.jd_text = None
 
-        print("\nPlease select the interview difficulty:\n [1] Easy\n [2] Medium\n [3] Hard\n [4] Extreme")
-        choice = input("\nEnter choice (1-4) [Default: 2]: ").strip()
-        mapping = {"1": "Easy", "2": "Medium", "3": "Hard", "4": "Extreme"}
-        self.state.difficulty = mapping.get(choice, "Medium")
+        # ── Step 2: Interview Type ──
+        print("\nSelect interview type:")
+        print(" [1] Technical   — Coding, system design, architecture")
+        print(" [2] Behavioral  — STAR method, teamwork, leadership")
+        print(" [3] HR          — Career goals, culture fit, motivation")
+        print(" [4] Combined    — Mix of all three types")
+        type_choice = input("\nEnter choice (1-4) [Default: 1]: ").strip()
+        type_mapping = {"1": "technical", "2": "behavioral", "3": "hr", "4": "combined"}
+        self.state.interview_type = type_mapping.get(type_choice, "technical")
 
+        # ── Step 3: Difficulty ──
+        print("\nSelect difficulty level:")
+        print(" [1] Easy\n [2] Medium\n [3] Hard\n [4] Extreme")
+        diff_choice = input("\nEnter choice (1-4) [Default: 2]: ").strip()
+        diff_mapping = {"1": "Easy", "2": "Medium", "3": "Hard", "4": "Extreme"}
+        self.state.difficulty = diff_mapping.get(diff_choice, "Medium")
+
+        # ── Step 4: Proctoring ──
         if self.proctoring:
             enable_proc = input("\nEnable AI Proctoring? [Y/n]: ").strip().lower()
             if enable_proc and enable_proc not in ['y', 'yes', '']:
                 self.proctoring = None
 
-        print(f"\n>> Configuration Locked: {self.state.difficulty} Mode")
+        # ── Initialize LLM + RAG if not already done (generic mode) ──
+        if self.brain is None:
+            self._init_brain()
+
+        # Re-initialize prompt_manager with final interview_type
+        from src.brain.prompt_manager import PromptManager
+        resume_str = self.resume_text.raw_text if hasattr(self.resume_text, 'raw_text') else self.resume_text
+        self.brain.prompt_manager = PromptManager(
+            resume_text=resume_str,
+            rag_engine=self.rag_engine,
+            interview_type=self.state.interview_type,
+        )
+
+        print(f"\n>> Configuration Locked:")
+        print(f"   Mode: {self.state.interview_mode.title()}")
+        print(f"   Type: {self.state.interview_type.title()}")
+        print(f"   Difficulty: {self.state.difficulty}")
         if self.proctoring:
-            print(">> Proctoring: ENABLED")
+            print("   Proctoring: ENABLED")
         time.sleep(1)
+
+    def _load_jd_interactive(self) -> str | None:
+        """Interactive JD loading for curated mode."""
+        if not self.jd_loader:
+            print("[!] RAG is disabled, curated mode unavailable. Using generic mode.")
+            return None
+
+        print("\nHow would you like to provide the job description?")
+        print(" [1] Load from file  — scans data/job_descriptions/ folder")
+        print(" [2] Paste text      — enter the JD text directly")
+        jd_choice = input("\nEnter choice (1-2) [Default: 1]: ").strip()
+
+        if jd_choice == "2":
+            print("\nPaste the job description below (press Enter twice to finish):")
+            lines = []
+            empty_count = 0
+            while True:
+                line = input()
+                if line == "":
+                    empty_count += 1
+                    if empty_count >= 2:
+                        break
+                    lines.append(line)
+                else:
+                    empty_count = 0
+                    lines.append(line)
+            raw_text = "\n".join(lines).strip()
+            jd_text = self.jd_loader.load_from_text(raw_text)
+            if jd_text:
+                print(f"[JDLoader] Loaded {len(jd_text.split())} words from pasted text.")
+            else:
+                print("[JDLoader] Empty text provided. Falling back to generic mode.")
+            return jd_text
+        else:
+            jd_text = self.jd_loader.load_jd()
+            if not jd_text:
+                print("[JDLoader] No JD found in folder. Falling back to generic mode.")
+            return jd_text
+
+    def _init_brain(self) -> None:
+        """Initialize LLM, RAG, and evaluator after session config is locked."""
+        logger.info("Initializing LLM and RAG engines...")
+
+        # Build RAG engine if curated mode with JD text
+        if self.state.interview_mode == "curated" and self.jd_text and settings.ENABLE_RAG:
+            self.rag_engine = RAGEngine(jd_text=self.jd_text)
+        else:
+            self.rag_engine = None
+
+        # Convert ResumeData → raw string for PromptManager
+        resume_str = self.resume_text.raw_text if hasattr(self.resume_text, 'raw_text') else self.resume_text
+
+        self.brain = LLMEngine(
+            resume_text=resume_str,
+            rag_engine=None,
+            interview_type=self.state.interview_type,
+        )
+        self.brain.prompt_manager.rag_engine = self.rag_engine
+
+        self.evaluator = Evaluator(settings.LLM_MODEL_PATH)
 
     # ── Main Session ──────────────────────────────────────────────
 

@@ -1,6 +1,28 @@
+import sys
 from pathlib import Path
 from pypdf import PdfReader
+from src.core.resume_parser import parser
+
+try:
+    from docx import Document
+    DOCX_AVAILABLE = True
+except ImportError:
+    DOCX_AVAILABLE = False
+
 from config import settings
+
+class ResumeData:
+    def __init__(self, raw_text: str, parsed_sections: dict):
+        self.raw_text = raw_text
+        self.parsed_sections = parsed_sections
+        # Fallback dictionary access for older code
+        self.text = raw_text
+    
+    def __str__(self):
+        return self.raw_text
+    
+    def __len__(self):
+        return len(self.raw_text)
 
 class ResumeLoader:
     def __init__(self):
@@ -10,28 +32,34 @@ class ResumeLoader:
     def load_resume(self):
         print(f"Scanning for resumes in: {self.resume_dir}")
         pdfs = list(self.resume_dir.glob("*.pdf"))
+        docxs = list(self.resume_dir.glob("*.docx")) if DOCX_AVAILABLE else []
         
-        if not pdfs:
+        resumes = pdfs + docxs
+        if not resumes:
             print("[ResumeLoader] No resume found. Proceeding without resume context.")
             return None
         
-        target_pdf = pdfs[0]
-        print(f"[ResumeLoader] Found resume: {target_pdf.name}")
+        target_resume = resumes[0]
+        print(f"[ResumeLoader] Found resume: {target_resume.name}")
         
         try:
-            return self._load_pdf(target_pdf)
+            return self.load_from_path(target_resume)
         except Exception as e:
-            print(f"[ResumeLoader] Error reading PDF: {e}")
+            print(f"[ResumeLoader] Error reading document: {e}")
             return None
-    
-    def _load_pdf(self, file_path):
+
+    def load_from_path(self, file_path: Path):
         MAX_FILE_SIZE = 10 * 1024 * 1024
         
         if not file_path.is_file():
             raise ValueError("Invalid file path")
         
-        if not file_path.suffix.lower() == '.pdf':
-            raise ValueError("File must be PDF")
+        ext = file_path.suffix.lower()
+        if ext not in ['.pdf', '.docx']:
+            raise ValueError("File must be PDF or DOCX")
+            
+        if ext == '.docx' and not DOCX_AVAILABLE:
+            raise ValueError("python-docx is not installed. Please pip install python-docx")
         
         file_size = file_path.stat().st_size
         if file_size > MAX_FILE_SIZE:
@@ -42,17 +70,28 @@ class ResumeLoader:
         
         try:
             file_path_resolved = file_path.resolve()
-            if not str(file_path_resolved).startswith(str(self.resume_dir.resolve())):
-                raise ValueError("Path traversal detected")
         except (FileNotFoundError, OSError) as e:
             raise ValueError("Invalid file path") from e
         
         text = ""
-        reader = PdfReader(file_path)
-        for page in reader.pages:
-            page_text = page.extract_text()
-            if page_text:
-                text += page_text + "\n"
-            if len(text) > 50000:
-                break
-        return " ".join(text.split())[:10000]
+        if ext == '.pdf':
+            reader = PdfReader(file_path)
+            # Parse all pages unconditionally to guarantee no cutoff
+            for page in reader.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    text += page_text + "\n"
+        elif ext == '.docx':
+            doc = Document(file_path)
+            for para in doc.paragraphs:
+                if para.text:
+                    text += para.text + "\n"
+                    
+        # Clean whitespace but DO NOT truncate the text length
+        # Using a single space join can mess up line-based parsing slightly but we do it per \n to preserve lines
+        lines = [line.strip() for line in text.split('\n') if line.strip()]
+        clean_text = "\n".join(lines)
+        
+        # Parse into sections
+        parsed_sections = parser.parse(clean_text)
+        return ResumeData(raw_text=clean_text, parsed_sections=parsed_sections)

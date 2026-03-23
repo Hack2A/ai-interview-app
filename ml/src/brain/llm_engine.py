@@ -19,7 +19,8 @@ STREAM_TIMEOUT_SECONDS = 30
 class LLMEngine:
     """Local LLM inference engine using llama.cpp."""
 
-    def __init__(self, resume_text: str | None = None, rag_engine=None) -> None:
+    def __init__(self, resume_text: str | None = None, rag_engine=None,
+                 interview_type: str = "technical") -> None:
         
         try:
             logger.info(f"Loading LLM from: {settings.LLM_MODEL_PATH}")
@@ -37,7 +38,10 @@ class LLMEngine:
             logger.error("Please ensure the model file exists in the models/llm directory")
             raise Exception(f"LLM initialization failed: {e}")
 
-        self.prompt_manager = PromptManager(resume_text=resume_text, rag_engine=rag_engine)
+        self.prompt_manager = PromptManager(
+            resume_text=resume_text, rag_engine=rag_engine,
+            interview_type=interview_type
+        )
         self.history = []
         self._is_first_call = True
 

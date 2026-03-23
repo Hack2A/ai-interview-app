@@ -33,7 +33,7 @@ export default function PublicNavbar() {
                 <div className="flex items-center justify-between">
                     {/* Logo */}
                     <Link href="/" className="flex items-center gap-2 group outline-none focus:outline-none">
-                        <div className="w-10 h-10 bg-gradient-to-br from-[#3B82F6] to-[#2563EB] rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/30 group-hover:shadow-blue-500/50 transition-all duration-300">
+                        <div className="w-10 h-10 bg-linear-to-br from-[#3B82F6] to-[#2563EB] rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/30 group-hover:shadow-blue-500/50 transition-all duration-300">
                             <svg
                                 className="w-6 h-6 text-white"
                                 fill="none"

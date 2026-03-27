@@ -12,7 +12,8 @@ Usage:
     # ATS Analysis
     result = api.analyze_resume()
 
-    # Interview
+    # Interview (with mode and type)
+    api.new_session(difficulty="Medium", interview_mode="curated", interview_type="behavioral")
     api.start_interview(difficulty="Medium", enable_proctoring=True)
 
     # Transcription
@@ -58,6 +59,8 @@ class BeaverAIOrchestrator:
             lazy_load: If True, engines are loaded on first use (faster startup).
                        If False, all engines load immediately.
         """
+        self._interview_mode: str = "generic"
+        self._interview_type: str = "technical"
         self._resume_text: str | None = None
         self._jd_text: str | None = None
 
@@ -116,6 +119,23 @@ class BeaverAIOrchestrator:
         if text:
             self.rag.index_jd(text)
 
+    def load_jd_from_file(self, file_path: str) -> dict:
+        """Load job description from a file path (PDF or TXT).
+
+        Args:
+            file_path: Path to a .pdf or .txt JD file.
+
+        Returns:
+            dict with 'jd' text and 'jd_loaded' bool.
+        """
+        from src.core.jd_loader import JDLoader
+        loader = JDLoader()
+        jd_text = loader.load_from_path(file_path)
+        if jd_text:
+            self._jd_text = jd_text
+            self.rag.index_jd(jd_text)
+        return {"jd": self._jd_text, "jd_loaded": self._jd_text is not None}
+
     @property
     def resume_text(self) -> str | None:
         return self._resume_text
@@ -134,6 +154,7 @@ class BeaverAIOrchestrator:
             self._llm_engine = LLMEngine(
                 resume_text=self._resume_text,
                 rag_engine=self._rag_engine,
+                interview_type=self._interview_type,
             )
         return self._llm_engine
 
@@ -396,14 +417,29 @@ class BeaverAIOrchestrator:
 
     # ── Session Management ────────────────────────────────────────
 
-    def new_session(self, difficulty: str = "Medium") -> dict:
+    def new_session(self, difficulty: str = "Medium",
+                    interview_mode: str = "generic",
+                    interview_type: str = "technical") -> dict:
         """Create a new interview session.
+
+        Args:
+            difficulty: Easy, Medium, Hard, or Extreme.
+            interview_mode: 'generic' or 'curated'.
+            interview_type: 'technical', 'behavioral', 'hr', or 'combined'.
 
         Returns:
             Session metadata dict.
         """
         from src.core.session_state import SessionState
-        self._session = SessionState(difficulty=difficulty)
+        self._interview_mode = interview_mode
+        self._interview_type = interview_type
+        self._session = SessionState(
+            difficulty=difficulty,
+            interview_mode=interview_mode,
+            interview_type=interview_type,
+        )
+        # Reset LLM engine to pick up new interview type
+        self._llm_engine = None
         return self._session.to_dict()
 
     def get_session_info(self) -> dict:

@@ -2,9 +2,9 @@
 
 Generates a structured compatibility analysis between a resume and job description.
 """
-import json
 import logging
-import re
+
+from src.career.json_utils import career_llm_call, safe_llm_json
 
 logger = logging.getLogger("MatchReport")
 
@@ -45,16 +45,10 @@ Respond ONLY with valid JSON containing these exact keys:
 }}"""
 
     try:
-        response = llm.create_completion(
-            prompt=prompt,
-            max_tokens=800,
-            temperature=0.3,
-            stop=["</s>", "USER:", "ASSISTANT:"],
-        )
-        text = response["choices"][0]["text"].strip()
-        match = re.search(r"\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}", text, re.DOTALL)
-        if match:
-            return json.loads(match.group())
+        text = career_llm_call(llm, prompt, max_tokens=1500, temperature=0.3)
+        result = safe_llm_json(text, expect="object")
+        if result is not None:
+            return result
     except Exception as e:
         logger.error(f"Match report generation failed: {e}")
 

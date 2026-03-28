@@ -1,10 +1,11 @@
 """Feature 3: Skill Gap Analyzer.
 
-Identifies missing skills and generates a prioritized learning plan.
+Identifies missing skills and generates a comprehensive learning plan with
+gap severity, skill categories, resources, certifications, and resume tips.
 """
-import json
 import logging
-import re
+
+from src.career.json_utils import career_llm_call, safe_llm_json
 
 logger = logging.getLogger("SkillGap")
 
@@ -12,7 +13,7 @@ logger = logging.getLogger("SkillGap")
 def analyze_skill_gap(llm, resume_text: str, jd_text: str,
                       match_json: dict | None = None,
                       current_date: str = "2026-03") -> dict:
-    """Analyze skill gaps and produce an upskilling plan via LLM.
+    """Analyze skill gaps with full roadmap-style output via LLM.
 
     Args:
         llm: A llama_cpp.Llama model instance.
@@ -22,8 +23,8 @@ def analyze_skill_gap(llm, resume_text: str, jd_text: str,
         current_date: Current date string for context.
 
     Returns:
-        dict with matched_skills, missing_skills, learning_plan,
-        estimated_time, priority_order, free_resources.
+        dict with skills_present, skills_missing, learning_roadmap,
+        recommended_certifications, resume_tips.
     """
     context = ""
     if match_json and "missing_keywords" in match_json:
@@ -32,48 +33,31 @@ def analyze_skill_gap(llm, resume_text: str, jd_text: str,
     prompt = f"""You are a career development advisor. Analyze the skill gap between this resume and job description.
 
 RESUME:
-{resume_text[:3000]}
+{resume_text[:2000]}
 
 JOB DESCRIPTION:
-{jd_text[:2000]}
+{jd_text[:1500]}
 {context}
-
-Current date: {current_date}
 
 Respond ONLY with valid JSON:
 {{
-  "matched_skills": ["skill1", "skill2"],
-  "missing_skills": ["skill1", "skill2"],
-  "learning_plan": [
-    {{
-      "skill": "<skill name>",
-      "priority": "<high|medium|low>",
-      "estimated_weeks": <number>,
-      "recommended_approach": "<description>"
-    }}
+  "skills_present": ["skill1", "skill2"],
+  "skills_missing": [
+    {{"skill": "<name>", "severity": "<critical|high|medium|low>"}}
   ],
-  "estimated_total_weeks": <number>,
-  "priority_order": ["skill1", "skill2"],
-  "free_resources": [
-    {{
-      "skill": "<skill name>",
-      "resource": "<resource name or URL>",
-      "type": "<course|doc|tutorial|video>"
-    }}
-  ]
+  "learning_plan": [
+    {{"skill": "<name>", "priority": "<must_learn|should_learn|nice_to_know>", "estimated_weeks": <number>, "resource": "<course or resource name>"}}
+  ],
+  "certifications": ["<certification name>"],
+  "resume_tips": ["<actionable tip>"]
 }}"""
 
     try:
-        response = llm.create_completion(
-            prompt=prompt,
-            max_tokens=1000,
-            temperature=0.3,
-            stop=["</s>", "USER:", "ASSISTANT:"],
-        )
-        text = response["choices"][0]["text"].strip()
-        match = re.search(r"\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}", text, re.DOTALL)
-        if match:
-            return json.loads(match.group())
+        text = career_llm_call(llm, prompt, max_tokens=2500, temperature=0.3)
+        result = safe_llm_json(text, expect="object")
+        if result is not None:
+            return result
+        logger.warning("Skill gap: LLM output could not be parsed as JSON")
     except Exception as e:
         logger.error(f"Skill gap analysis failed: {e}")
 

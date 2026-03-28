@@ -2,9 +2,9 @@
 
 Adjusts resume language and emphasis based on target industry norms.
 """
-import json
 import logging
-import re
+
+from src.career.json_utils import career_llm_call, safe_llm_json
 
 logger = logging.getLogger("IndustryCalibrator")
 
@@ -38,7 +38,7 @@ def calibrate_industry(llm, resume_text: str, mode: str = "startup") -> dict:
     prompt = f"""You are a resume strategist specializing in industry-specific optimization.
 
 RESUME:
-{resume_text[:3000]}
+{resume_text[:2000]}
 
 TARGET INDUSTRY: {mode}
 INSTRUCTION: {instruction}
@@ -62,16 +62,11 @@ Respond ONLY with valid JSON:
 }}"""
 
     try:
-        response = llm.create_completion(
-            prompt=prompt,
-            max_tokens=800,
-            temperature=0.3,
-            stop=["</s>", "USER:", "ASSISTANT:"],
-        )
-        text = response["choices"][0]["text"].strip()
-        match = re.search(r"\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}", text, re.DOTALL)
-        if match:
-            return json.loads(match.group())
+        text = career_llm_call(llm, prompt, max_tokens=2000, temperature=0.3)
+        result = safe_llm_json(text, expect="object")
+        if result is not None:
+            return result
+        logger.warning("Industry calibrator: LLM output could not be parsed as JSON")
     except Exception as e:
         logger.error(f"Industry calibration failed: {e}")
 

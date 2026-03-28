@@ -1,65 +1,59 @@
 """Feature 5: Recruiter Eye Simulator.
 
-Simulates a recruiter reviewing the resume against the JD.
+Simulates how a tough recruiter would perceive a resume against a JD.
 """
-import json
 import logging
-import re
+
+from src.career.json_utils import career_llm_call, safe_llm_json
 
 logger = logging.getLogger("RecruiterSim")
 
 
-def simulate_recruiter(llm, resume_text: str, jd_text: str,
-                       current_date: str = "2026-03") -> dict:
-    """Simulate a recruiter's first-pass review via LLM.
+def simulate_recruiter(llm, resume_text: str, jd_text: str) -> dict:
+    """Simulate a critical recruiter's evaluation via LLM.
 
     Args:
         llm: A llama_cpp.Llama model instance.
         resume_text: Full resume text.
         jd_text: Full job description text.
-        current_date: Current date string for context.
 
     Returns:
-        dict with verdict, scores, strengths, red_flags,
-        interview_questions, tips.
+        dict with verdict, confidence, six_second_impression,
+        relevance_score, presentation_score, strengths, red_flags,
+        interview_questions, tips_for_candidate, recruiter_notes.
     """
-    prompt = f"""You are a senior tech recruiter with 10+ years of experience. You are reviewing a resume for a specific role.
-Perform a realistic recruiter first-pass: spend 6 seconds scanning, then do a deep read.
+    prompt = f"""You are a highly experienced, blunt technical recruiter who reviews 200+ resumes per day.
+You have 6 seconds to form an initial impression.
 
 RESUME:
-{resume_text[:3000]}
+{resume_text[:2000]}
 
 JOB DESCRIPTION:
-{jd_text[:2000]}
+{jd_text[:1500]}
 
-Current date: {current_date}
+Give your raw, unfiltered assessment. Be specific and brutally honest.
 
 Respond ONLY with valid JSON:
 {{
   "verdict": "<SHORTLIST|MAYBE|REJECT>",
   "confidence": <0-100>,
-  "six_second_impression": "<what caught your eye in 6 seconds>",
+  "six_second_impression": "<what you noticed in the first 6 seconds>",
   "relevance_score": <0-100>,
   "presentation_score": <0-100>,
-  "strengths": ["strength1", "strength2", "strength3"],
+  "strengths": ["strength1", "strength2"],
   "red_flags": ["flag1", "flag2"],
-  "interview_questions": ["question1", "question2", "question3"],
-  "tips_for_candidate": ["tip1", "tip2", "tip3"],
-  "recruiter_notes": "<internal notes a recruiter would write>"
+  "interview_questions": ["question you'd ask in screening"],
+  "tips_for_candidate": ["actionable improvement tip"],
+  "recruiter_notes": "<internal notes you'd write>"
 }}"""
 
     try:
-        response = llm.create_completion(
-            prompt=prompt,
-            max_tokens=800,
-            temperature=0.3,
-            stop=["</s>", "USER:", "ASSISTANT:"],
-        )
-        text = response["choices"][0]["text"].strip()
-        match = re.search(r"\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}", text, re.DOTALL)
-        if match:
-            return json.loads(match.group())
+        text = career_llm_call(llm, prompt, max_tokens=1500, temperature=0.4)
+        result = safe_llm_json(text, expect="object")
+        if result is not None:
+            return result
+        logger.warning("Recruiter sim: LLM output could not be parsed as JSON")
     except Exception as e:
         logger.error(f"Recruiter simulation failed: {e}")
 
-    return {"error": "Failed to run recruiter simulation"}
+    return {"error": "Failed to simulate recruiter review"}

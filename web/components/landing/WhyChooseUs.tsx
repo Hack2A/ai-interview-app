@@ -76,11 +76,11 @@ export default function WhyChooseUs() {
                             {/* Card */}
                             <div className="relative h-full p-8 bg-white border border-[#E2E8F0] hover:border-blue-200 rounded-2xl hover:shadow-xl hover:shadow-blue-100/50 transition-all duration-300">
                                 {/* Glow effect on hover */}
-                                <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-blue-50/0 to-indigo-50/0 group-hover:from-blue-50/50 group-hover:to-indigo-50/50 transition-all duration-300"></div>
+                                <div className="absolute inset-0 rounded-2xl bg-linear-to-br from-blue-50/0 to-indigo-50/0 group-hover:from-blue-50/50 group-hover:to-indigo-50/50 transition-all duration-300"></div>
 
                                 <div className="relative z-10">
                                     {/* Icon */}
-                                    <div className="inline-flex items-center justify-center w-16 h-16 mb-6 bg-gradient-to-br from-[#3B82F6] to-[#2563EB] rounded-xl text-white shadow-lg shadow-blue-500/30 group-hover:shadow-blue-500/50 transition-all duration-300">
+                                    <div className="inline-flex items-center justify-center w-16 h-16 mb-6 bg-linear-to-br from-[#3B82F6] to-[#2563EB] rounded-xl text-white shadow-lg shadow-blue-500/30 group-hover:shadow-blue-500/50 transition-all duration-300">
                                         {feature.icon}
                                     </div>
 

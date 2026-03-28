@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Cryptrael Vault",
-  description: "Cryptrael Vault is a secure digital vault platform that combines end-to-end AES-256 encryption, SHA-256 integrity hashing, and blockchain-based audit logging to provide tamper-proof, zero-trust storage for sensitive digital assets.",
+  title: "BeaverAI - Your AI Interview Coach",
+  description: "BeaverAI is your AI interview coach which will help you in your interview prep.",
 };
 
 export default function RootLayout({
@@ -24,7 +24,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="bg-white text-white">
+    <html lang="en" className="bg-gray-50 text-black">
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >

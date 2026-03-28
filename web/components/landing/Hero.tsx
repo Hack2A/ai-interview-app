@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 
 export default function Hero() {
     return (
-        <section className="relative min-h-screen bg-gradient-to-br from-white via-blue-50/30 to-white overflow-hidden">
+        <section className="relative min-h-screen bg-linear-to-br from-white via-blue-50/30 to-white overflow-hidden">
 
             <div className="relative max-w-7xl mx-auto px-6 pt-25 pb-24 lg:pb-32">
                 <div className="grid lg:grid-cols-2 gap-12 items-center">
@@ -77,7 +77,7 @@ export default function Hero() {
                         transition={{ duration: 1, delay: 0.2 }}
                         className="relative hidden lg:block"
                     >
-                        <div className="relative w-full h-125 rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 shadow-2xl shadow-blue-200/50 overflow-hidden">
+                        <div className="relative w-full h-125 rounded-2xl bg-linear-to-br from-blue-50 to-indigo-50 border border-blue-200 shadow-2xl shadow-blue-200/50 overflow-hidden">
                             {/* Animated background elements */}
                             <div className="absolute inset-0">
                                 <div className="absolute top-20 left-20 w-32 h-32 bg-[#3B82F6] rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob"></div>

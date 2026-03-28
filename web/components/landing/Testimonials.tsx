@@ -28,7 +28,7 @@ const testimonials = [
 
 export default function Testimonials() {
     return (
-        <section className="relative py-24 bg-gradient-to-b from-white to-blue-50/30 overflow-hidden">
+        <section className="relative py-24 bg-linear-to-b from-white to-blue-50/30 overflow-hidden">
             {/* Background Blurred Shapes */}
             <div className="absolute top-10 right-10 w-72 h-72 bg-blue-200 rounded-full mix-blend-multiply filter blur-3xl opacity-20"></div>
             <div className="absolute bottom-10 left-10 w-72 h-72 bg-indigo-200 rounded-full mix-blend-multiply filter blur-3xl opacity-20"></div>
@@ -65,7 +65,7 @@ export default function Testimonials() {
                             {/* Card */}
                             <div className="relative h-full p-8 bg-white border border-[#E2E8F0] hover:border-blue-200 rounded-2xl hover:shadow-xl hover:shadow-blue-100/50 transition-all duration-300">
                                 {/* Glowing border effect */}
-                                <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-blue-50/0 via-indigo-50/0 to-blue-50/0 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+                                <div className="absolute inset-0 rounded-2xl bg-linear-to-br from-blue-50/0 via-indigo-50/0 to-blue-50/0 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
 
                                 <div className="relative z-10">
                                     {/* Stars */}
@@ -90,7 +90,7 @@ export default function Testimonials() {
                                     {/* Author */}
                                     <div className="flex items-center gap-4 pt-4 border-t border-[#E2E8F0]">
                                         {/* Avatar */}
-                                        <div className="w-12 h-12 bg-gradient-to-br from-[#3B82F6] to-[#2563EB] rounded-full flex items-center justify-center font-bold text-white shadow-lg">
+                                        <div className="w-12 h-12 bg-linear-to-br from-[#3B82F6] to-[#2563EB] rounded-full flex items-center justify-center font-bold text-white shadow-lg">
                                             {testimonial.avatar}
                                         </div>
 

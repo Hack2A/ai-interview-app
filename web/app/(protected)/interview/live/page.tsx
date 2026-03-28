@@ -11,6 +11,7 @@ import TranscriptPanel from "@/components/interview/liveInterview/TranscriptPane
 import SettingsModal from "@/components/interview/liveInterview/SettingsModal";
 import DisconnectModal from "@/components/interview/liveInterview/DisconnectModal";
 import { TranscriptEntry } from "@/types/LiveInterviewTypes";
+import { useRealtimeStream } from "@/hooks/useRealtimeStream";
 
 const MOCK_TRANSCRIPT: TranscriptEntry[] = [
 	{
@@ -72,6 +73,11 @@ export default function LiveInterview() {
 		handleMicChange,
 	} = useControlbar();
 
+	const { startStreaming, stopStreaming, isStreaming } = useRealtimeStream(
+		stream,
+		{ autoStart: true },
+	);
+
 	// Hide navbar for full-screen interview experience
 	useEffect(() => {
 		setShowNavbar(false);
@@ -80,6 +86,7 @@ export default function LiveInterview() {
 
 	const handleDisconnectConfirm = () => {
 		setIsDisconnectOpen(false);
+		stopStreaming();
 		router.push("/home");
 	};
 

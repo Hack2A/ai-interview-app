@@ -11,3 +11,5 @@ python-dotenv==1.2.1
 requests==2.32.5
 sqlparse==0.5.5
 urllib3==2.6.3
+channels>=4.0
+daphne>=4.0

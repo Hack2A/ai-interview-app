@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>BeaverAI WebSocket Test</title>
+</head>
+
+<body style="font-family: system-ui; max-width: 800px; margin: 40px auto; padding: 0 20px;">
+  <h2>🦫 BeaverAI Interview — WebSocket Test</h2>
+
+  <!-- Setup Form -->
+  <div id="setup-panel" style="background:#f8f9fa; padding:16px; border-radius:8px; margin-bottom:16px;">
+    <h3 style="margin-top:0;">Interview Setup</h3>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:12px;">
+      <select id="difficulty">
+        <option value="Easy">Easy</option>
+        <option value="Medium" selected>Medium</option>
+        <option value="Hard">Hard</option>
+        <option value="Extreme">Extreme</option>
+      </select>
+      <select id="mode">
+        <option value="generic">Generic</option>
+        <option value="curated">Curated (Resume-based)</option>
+      </select>
+      <select id="interview_type">
+        <option value="technical">Technical</option>
+        <option value="behavioral">Behavioral</option>
+        <option value="hr">HR</option>
+        <option value="combined">Combined</option>
+      </select>
+      <label><input type="checkbox" id="proctoring"> Enable Proctoring</label>
+    </div>
+
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
+      <div>
+        <label style="font-weight:600;">📄 Resume (PDF)</label><br>
+        <input type="file" id="resume_file" accept=".pdf" style="margin-top:4px;">
+      </div>
+      <div>
+        <label style="font-weight:600;">📋 Job Description (PDF)</label><br>
+        <input type="file" id="jd_file" accept=".pdf" style="margin-top:4px;">
+      </div>
+    </div>
+
+    <details style="margin-bottom:12px;">
+      <summary style="cursor:pointer; color:#666;">Or paste as text instead...</summary>
+      <textarea id="resume" rows="3" placeholder="Paste resume text here..."
+        style="width:100%;box-sizing:border-box;margin-top:8px;"></textarea>
+      <textarea id="jd" rows="3" placeholder="Paste job description text here..."
+        style="width:100%;box-sizing:border-box;margin-top:4px;"></textarea>
+    </details>
+
+    <button onclick="startInterview()" id="start-btn"
+      style="padding:10px 28px; background:#2563eb; color:white; border:none; border-radius:6px; cursor:pointer; font-size:15px;">
+      🚀 Start Interview
+    </button>
+  </div>
+
+  <!-- Log -->
+  <div id="log"
+    style="white-space:pre-wrap; font-family:monospace; background:#111; color:#0f0; padding:16px; height:350px; overflow-y:auto; border-radius:8px;">
+  </div>
+  <br>
+
+  <!-- Answer Input -->
+  <div style="display:flex; gap:8px;">
+    <input id="msg" placeholder="Type your answer..."
+      style="flex:1; padding:8px; border-radius:4px; border:1px solid #ccc;" disabled>
+    <button onclick="sendAnswer()" id="send-btn" disabled style="padding:8px 16px;">Send</button>
+    <button onclick="endInterview()" id="end-btn" disabled
+      style="padding:8px 16px; background:#dc2626; color:white; border:none; border-radius:4px;">End</button>
+  </div>
+
+  <script>
+    const log = document.getElementById('log');
+    const msgInput = document.getElementById('msg');
+    const sendBtn = document.getElementById('send-btn');
+    const endBtn = document.getElementById('end-btn');
+    const startBtn = document.getElementById('start-btn');
+    let ws = null;
+
+    function addLog(txt, color) {
+      const span = document.createElement('span');
+      span.style.color = color || '#0f0';
+      span.textContent = txt + '\n';
+      log.appendChild(span);
+      log.scrollTop = log.scrollHeight;
+    }
+
+    function fileToBase64(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          // Strip "data:...;base64," prefix
+          const b64 = reader.result.split(',')[1];
+          resolve(b64);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    }
+
+    async function startInterview() {
+      startBtn.disabled = true;
+      startBtn.textContent = '⏳ Connecting...';
+
+      // Build setup payload
+      const setup = {
+        type: 'setup',
+        difficulty: document.getElementById('difficulty').value,
+        mode: document.getElementById('mode').value,
+        interview_type: document.getElementById('interview_type').value,
+        proctoring: document.getElementById('proctoring').checked,
+      };
+
+      // Read PDF files if provided
+      const resumeFile = document.getElementById('resume_file').files[0];
+      const jdFile = document.getElementById('jd_file').files[0];
+
+      if (resumeFile) {
+        addLog('📄 Reading resume PDF: ' + resumeFile.name, '#888');
+        setup.resume_pdf = await fileToBase64(resumeFile);
+      } else {
+        setup.resume = document.getElementById('resume').value;
+      }
+
+      if (jdFile) {
+        addLog('📋 Reading JD PDF: ' + jdFile.name, '#888');
+        setup.jd_pdf = await fileToBase64(jdFile);
+      } else {
+        setup.jd = document.getElementById('jd').value;
+      }
+
+      // Connect WebSocket
+      ws = new WebSocket('ws://' + location.host + '/ws/interview/');
+
+      ws.onopen = () => {
+        addLog('✅ WebSocket connected', '#0f0');
+        addLog('→ Sending setup: ' + setup.difficulty + ' / ' + setup.mode + ' / ' + setup.interview_type, '#88f');
+        ws.send(JSON.stringify(setup));
+        document.getElementById('setup-panel').style.display = 'none';
+      };
+
+      ws.onmessage = (e) => {
+        const msg = JSON.parse(e.data);
+        switch (msg.type) {
+          case 'connected':
+            addLog('🔗 Session: ' + msg.session_id, '#888');
+            break;
+          case 'status':
+            addLog('⏳ ' + msg.message, '#ff0');
+            break;
+          case 'ats_result':
+            addLog('📊 ATS Result:', '#0ff');
+            addLog(JSON.stringify(msg.data, null, 2), '#0ff');
+            break;
+          case 'question':
+            addLog('\n🤖 AI: ' + msg.text, '#0f0');
+            msgInput.disabled = false;
+            sendBtn.disabled = false;
+            endBtn.disabled = false;
+            msgInput.focus();
+            break;
+          case 'stream_start':
+            addLog('\n🤖 AI: ', '#0f0');
+            break;
+          case 'stream_chunk':
+            const last = log.lastChild;
+            if (last) last.textContent = last.textContent.trimEnd() + msg.text;
+            log.scrollTop = log.scrollHeight;
+            break;
+          case 'stream_end':
+            addLog('', '#0f0');
+            msgInput.disabled = false;
+            msgInput.focus();
+            break;
+          case 'response':
+            break;
+          case 'transcription':
+            addLog('🎤 Transcribed: ' + msg.text, '#f0f');
+            break;
+          case 'report':
+            addLog('\n📋 EVALUATION REPORT:', '#ff0');
+            addLog(JSON.stringify(msg.data, null, 2), '#ff0');
+            msgInput.disabled = true;
+            sendBtn.disabled = true;
+            endBtn.disabled = true;
+            break;
+          case 'error':
+            addLog('❌ ' + msg.message, '#f00');
+            break;
+          default:
+            addLog('← ' + JSON.stringify(msg), '#888');
+        }
+      };
+
+      ws.onerror = () => { addLog('❌ WebSocket error', '#f00'); startBtn.disabled = false; startBtn.textContent = '🚀 Start Interview'; };
+      ws.onclose = () => addLog('🔌 Disconnected', '#888');
+    }
+
+    function sendAnswer() {
+      const text = msgInput.value.trim();
+      if (!text || !ws) return;
+      ws.send(JSON.stringify({ type: 'answer', text }));
+      addLog('\n👤 You: ' + text, '#88f');
+      msgInput.value = '';
+      msgInput.disabled = true;
+    }
+
+    function endInterview() {
+      if (!ws) return;
+      ws.send(JSON.stringify({ type: 'end' }));
+      addLog('\n→ Ending interview...', '#ff0');
+    }
+
+    msgInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendAnswer(); });
+  </script>
+</body>
+
+</html>

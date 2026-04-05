@@ -8,21 +8,21 @@ class PromptManager:
 
     _TYPE_PERSONAS = {
         "technical": (
-            "You are BeaverAI, a professional Technical Interviewer. "
+            "You are intrv.ai, a professional Technical Interviewer. "
             "Your goal is to assess the candidate's skills in Coding, System Design, and Data Structures.\n"
         ),
         "behavioral": (
-            "You are BeaverAI, a professional Behavioral Interviewer. "
+            "You are intrv.ai, a professional Behavioral Interviewer. "
             "Your goal is to assess the candidate's soft skills, teamwork, leadership, and problem-solving approach "
             "using the STAR method (Situation, Task, Action, Result).\n"
         ),
         "hr": (
-            "You are BeaverAI, a professional HR Interviewer. "
+            "You are intrv.ai, a professional HR Interviewer. "
             "Your goal is to evaluate the candidate's career goals, cultural fit, salary expectations, "
             "strengths, weaknesses, and motivation for the role.\n"
         ),
         "combined": (
-            "You are BeaverAI, a professional Interview Panel conducting a comprehensive interview. "
+            "You are intrv.ai, a professional Interview Panel conducting a comprehensive interview. "
             "You will rotate between Technical, Behavioral, and HR questions to evaluate the candidate holistically. "
             "Mix coding/system-design questions with STAR-method behavioral questions and HR/culture-fit questions.\n"
         ),
@@ -200,14 +200,26 @@ class PromptManager:
         else:
             return "Ask a technical question to assess the candidate's skills."
 
-    def build_messages(self, history: list[dict], difficulty: str = "Medium") -> list[dict]:
-        """Construct the message array for LLM chat completion."""
-       
+    def build_messages(self, history: list[dict], difficulty: str = "Medium",
+                       question_context: dict | None = None) -> list[dict]:
+        """Construct the message array for LLM chat completion.
+
+        Args:
+            history: Conversation history.
+            difficulty: Current difficulty level.
+            question_context: Optional RAG-retrieved question with ideal answer.
+        """
+
         messages = [{"role": "system", "content": self.system_persona}]
-        
+
         difficulty_prompt = self.difficulty_prompts.get(difficulty, self.difficulty_prompts["Medium"])
         messages.append({"role": "system", "content": difficulty_prompt})
-        
+
+        # Inject RAG question context if provided
+        if question_context:
+            q_injection = self._build_question_injection(question_context)
+            messages.append({"role": "system", "content": q_injection})
+
         if history:
             sanitized_history = []
             for msg in history[-20:]:
@@ -217,6 +229,34 @@ class PromptManager:
                 }
                 sanitized_history.append(sanitized_msg)
             messages.extend(sanitized_history)
-            
-        
+
+
         return messages
+
+    def _build_question_injection(self, question_context: dict) -> str:
+        """Build a system message that guides the LLM to ask a specific question."""
+        q = question_context.get("question", "")
+        category = question_context.get("category", "general")
+        difficulty = question_context.get("difficulty", "medium")
+
+        injection = (
+            f"QUESTION BANK GUIDANCE (Category: {category}, Difficulty: {difficulty}):\n"
+            f"Consider asking a question along these lines: \"{q}\"\n"
+            "You may rephrase it naturally to fit the conversation flow, "
+            "but keep the core topic and difficulty intact.\n"
+            "Do NOT mention that this question came from a question bank.\n"
+        )
+
+        return injection
+
+    def build_evaluation_context(self, question: str, ideal_answer: str,
+                                  candidate_answer: str) -> str:
+        """Build context for per-question evaluation."""
+        return (
+            f"QUESTION ASKED: {question}\n\n"
+            f"IDEAL ANSWER (reference): {ideal_answer}\n\n"
+            f"CANDIDATE'S ANSWER: {candidate_answer}\n\n"
+            "Evaluate the candidate's answer against the ideal. "
+            "Score technical accuracy, clarity, and communication separately."
+        )
+

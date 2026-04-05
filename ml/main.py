@@ -597,7 +597,7 @@ def main():
     if mode == "2":
         run_career_cli()
     else:
-        print("\n Booting up BeaverAI Interview Core...")
+        print("\n Booting up intrv.ai Interview Core...")
         app = InterviewManager()
         app.start_session()
 

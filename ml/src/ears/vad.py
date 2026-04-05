@@ -22,6 +22,7 @@ class VoiceRecorder:
         self.base_threshold = 0.5
         self.speaking_threshold = 0.85
         self.current_threshold = self.base_threshold
+        self.interrupt_buffer = []
 
     def set_mode(self, mode: str) -> None:
         """Switch VAD threshold between 'listening' and 'speaking' modes."""
@@ -38,11 +39,17 @@ class VoiceRecorder:
         silence_start = None
         chunk_size = 512 
         start_time = time.time()
-
         
+        # Merge explicitly passed prepend_audio and internally saved interrupt_buffer
         if prepend_audio is not None and len(prepend_audio) > 0:
-            print("\r[Recorder] Resuming from interruption...", end="", flush=True)
             buffer.append(prepend_audio)
+            
+        if self.interrupt_buffer:
+            buffer.extend(self.interrupt_buffer)
+            self.interrupt_buffer = []
+
+        if buffer:
+            print("\r[Recorder] Resuming from interruption...", end="", flush=True)
             speech_started = True 
             silence_start = None
         else:

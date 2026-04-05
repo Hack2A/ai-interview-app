@@ -1,12 +1,12 @@
-"""BeaverAI ML Orchestrator — unified API for backend integration.
+"""intrv.ai ML Orchestrator — unified API for backend integration.
 
 This is the SINGLE ENTRY POINT for the backend to access all ML functionalities.
-Import this module and use the BeaverAIOrchestrator class.
+Import this module and use the IntrvAIOrchestrator class.
 
 Usage:
-    from orchestrator import BeaverAIOrchestrator
+    from orchestrator import IntrvAIOrchestrator
 
-    api = BeaverAIOrchestrator()
+    api = IntrvAIOrchestrator()
     api.load_documents()
 
     # ATS Analysis
@@ -33,11 +33,11 @@ from typing import Generator
 
 from config import settings
 
-logger = logging.getLogger("BeaverAI")
+logger = logging.getLogger("IntrvAI")
 
 
-class BeaverAIOrchestrator:
-    """Unified API for all BeaverAI ML functionalities.
+class IntrvAIOrchestrator:
+    """Unified API for all intrv.ai ML functionalities.
 
     Exposes clean methods for:
     - Document loading (resume, JD)
@@ -81,7 +81,7 @@ class BeaverAIOrchestrator:
             _ = self.stt
             _ = self.tts
 
-        logger.info("BeaverAI Orchestrator initialized")
+        logger.info("intrv.ai Orchestrator initialized")
 
     # ── Document Loading ──────────────────────────────────────────
 
@@ -247,7 +247,8 @@ class BeaverAIOrchestrator:
     # ── LLM Chat ──────────────────────────────────────────────────
 
     def chat(self, user_input: str,
-             difficulty: str = "Medium") -> str:
+             difficulty: str = "Medium",
+             question_context: dict | None = None) -> str:
         """Send a message to the LLM and get a full response (non-streaming).
 
         Args:
@@ -257,11 +258,12 @@ class BeaverAIOrchestrator:
         Returns:
             Full LLM response as string.
         """
-        chunks = list(self.llm.generate_stream(user_input, difficulty))
+        chunks = list(self.llm.generate_stream(user_input, difficulty, question_context=question_context))
         return " ".join(chunks).strip()
 
     def chat_stream(self, user_input: str,
-                    difficulty: str = "Medium") -> Generator[str, None, None]:
+                    difficulty: str = "Medium",
+                    question_context: dict | None = None) -> Generator[str, None, None]:
         """Stream LLM response token-by-token.
 
         Args:
@@ -271,7 +273,7 @@ class BeaverAIOrchestrator:
         Yields:
             Sentence fragments as they are generated.
         """
-        yield from self.llm.generate_stream(user_input, difficulty)
+        yield from self.llm.generate_stream(user_input, difficulty, question_context=question_context)
 
     def get_opening_question(self, difficulty: str = "Medium") -> str:
         """Generate the first interview question based on resume/JD context.
@@ -464,6 +466,106 @@ class BeaverAIOrchestrator:
         from src.core.interview_manager import InterviewManager
         InterviewManager().start_session()
 
+    # ── Question Bank RAG ─────────────────────────────────────────
+
+    def index_question_bank(self) -> dict:
+        """Index the question bank from question_bank.json into ChromaDB.
+
+        Returns:
+            dict with 'count' of indexed questions and 'status'.
+        """
+        from src.brain.rag_engine import QuestionBankRAG
+
+        qb = QuestionBankRAG()
+
+        if not settings.QUESTION_BANK_PATH.exists():
+            return {"status": "error", "message": "question_bank.json not found. Run ingest_datasets.py first."}
+
+        with open(settings.QUESTION_BANK_PATH, 'r', encoding='utf-8') as f:
+            questions = json.load(f)
+
+        count = qb.index_questions(questions)
+        return {"status": "ok", "count": count}
+
+    def get_question_from_bank(
+        self,
+        skills: list[str] | None = None,
+        category: str | None = None,
+        difficulty: str | None = None,
+        top_k: int = 5,
+        exclude_ids: list[str] | None = None,
+    ) -> list[dict]:
+        """Retrieve interview questions from the question bank.
+
+        Args:
+            skills: List of candidate skills for filtering.
+            category: Filter by category (e.g., 'dsa', 'ml').
+            difficulty: Filter by difficulty ('easy', 'medium', 'hard').
+            top_k: Max results.
+            exclude_ids: IDs of already-asked questions.
+
+        Returns:
+            List of question dicts with answer and metadata.
+        """
+        from src.brain.rag_engine import QuestionBankRAG
+
+        qb = QuestionBankRAG()
+        if not qb.is_indexed:
+            return []
+
+        if skills:
+            return qb.retrieve_by_skills(
+                skills=skills, category=category,
+                difficulty=difficulty, top_k=top_k,
+                exclude_ids=exclude_ids,
+            )
+        else:
+            query = f"{category or 'general'} interview questions"
+            return qb.retrieve_questions(
+                query=query, top_k=top_k,
+                category=category, difficulty=difficulty,
+                exclude_ids=exclude_ids,
+            )
+
+    def extract_resume_skills(self, resume_text: str | None = None) -> dict:
+        """Extract structured skills from resume text.
+
+        Args:
+            resume_text: Resume text. If None, uses loaded resume.
+
+        Returns:
+            dict with skills, skill_domains, interview_domains.
+        """
+        from src.brain.skill_extractor import SkillExtractor
+
+        text = resume_text or self._resume_text
+        if not text:
+            return {"skills": [], "skill_domains": {}, "interview_domains": []}
+
+        if hasattr(text, 'raw_text'):
+            text = text.raw_text
+
+        return SkillExtractor().extract(text)
+
+    def run_dataset_ingestion(self) -> dict:
+        """Run the dataset ingestion pipeline.
+
+        Downloads datasets from Kaggle (requires KAGGLE_API_TOKEN env var),
+        normalizes, deduplicates, and saves to question_bank.json.
+
+        Returns:
+            dict with 'status', 'output_path', and 'question_count'.
+        """
+        try:
+            from scripts.ingest_datasets import run_ingestion
+            output_path = run_ingestion()
+            return {
+                "status": "ok",
+                "output_path": str(output_path),
+            }
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
     # ── Health Check ──────────────────────────────────────────────
 
     def health_check(self) -> dict:
@@ -482,6 +584,8 @@ class BeaverAIOrchestrator:
             "models_dir_exists": settings.MODELS_DIR.exists(),
             "llm_model_exists": settings.LLM_MODEL_PATH.exists(),
             "tts_model_exists": settings.TTS_MODEL_PATH.exists(),
+            "question_bank_exists": settings.QUESTION_BANK_PATH.exists(),
         }
         checks["all_ready"] = all(checks.values())
         return checks
+

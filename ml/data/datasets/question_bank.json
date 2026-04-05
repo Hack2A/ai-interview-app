@@ -1,0 +1,2421 @@
+[
+  {
+    "question": "Explain the difference between list and tuple.",
+    "answer": "",
+    "category": "general_technical",
+    "difficulty": "medium",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "Explain the difference between list and encapsulation.",
+    "answer": "",
+    "category": "general_technical",
+    "difficulty": "hard",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "Explain the difference between list and garbage collection.",
+    "answer": "",
+    "category": "general_technical",
+    "difficulty": "hard",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "Explain the difference between list and exception handling.",
+    "answer": "",
+    "category": "general_technical",
+    "difficulty": "easy",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "Explain the difference between list and binary search.",
+    "answer": "",
+    "category": "dsa",
+    "difficulty": "medium",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "Explain the difference between tuple and array.",
+    "answer": "",
+    "category": "dsa",
+    "difficulty": "hard",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "Explain the difference between tuple and SQL injection.",
+    "answer": "",
+    "category": "database",
+    "difficulty": "hard",
+    "tags": [
+      "sql"
+    ],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "Explain the difference between array and hashmap.",
+    "answer": "",
+    "category": "dsa",
+    "difficulty": "hard",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "Explain the difference between array and polymorphism.",
+    "answer": "",
+    "category": "dsa",
+    "difficulty": "hard",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "Explain the difference between array and multithreading.",
+    "answer": "",
+    "category": "dsa",
+    "difficulty": "hard",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "Explain the difference between array and Big O notation.",
+    "answer": "",
+    "category": "dsa",
+    "difficulty": "easy",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "Explain the difference between array and lambda function.",
+    "answer": "",
+    "category": "dsa",
+    "difficulty": "medium",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "Explain the difference between array and virtual memory.",
+    "answer": "",
+    "category": "dsa",
+    "difficulty": "hard",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "Explain the difference between array and linked list.",
+    "answer": "",
+    "category": "dsa",
+    "difficulty": "medium",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "Explain the difference between hashmap and recursion.",
+    "answer": "",
+    "category": "dsa",
+    "difficulty": "hard",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "Explain the difference between recursion and inheritance.",
+    "answer": "",
+    "category": "dsa",
+    "difficulty": "hard",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "Explain the difference between recursion and dictionary.",
+    "answer": "",
+    "category": "dsa",
+    "difficulty": "easy",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "Explain the difference between inheritance and pointers.",
+    "answer": "",
+    "category": "general_technical",
+    "difficulty": "medium",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "Explain the difference between encapsulation and pointers.",
+    "answer": "",
+    "category": "general_technical",
+    "difficulty": "easy",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "Explain the difference between polymorphism and pointers.",
+    "answer": "",
+    "category": "general_technical",
+    "difficulty": "easy",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "Explain the difference between pointers and REST API.",
+    "answer": "",
+    "category": "backend",
+    "difficulty": "medium",
+    "tags": [
+      "rest",
+      "api"
+    ],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "Explain the difference between REST API and deadlock.",
+    "answer": "",
+    "category": "backend",
+    "difficulty": "medium",
+    "tags": [
+      "rest",
+      "api"
+    ],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "Explain the difference between SQL injection and stack.",
+    "answer": "",
+    "category": "dsa",
+    "difficulty": "medium",
+    "tags": [
+      "sql"
+    ],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "Explain the difference between multithreading and stack.",
+    "answer": "",
+    "category": "dsa",
+    "difficulty": "easy",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "Explain the difference between deadlock and stack.",
+    "answer": "",
+    "category": "dsa",
+    "difficulty": "medium",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "Explain the difference between garbage collection and queue.",
+    "answer": "",
+    "category": "dsa",
+    "difficulty": "hard",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "Explain the difference between Big O notation and merge sort.",
+    "answer": "",
+    "category": "dsa",
+    "difficulty": "medium",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "Explain the difference between queue and merge sort.",
+    "answer": "",
+    "category": "dsa",
+    "difficulty": "easy",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "Explain the difference between dictionary and interface.",
+    "answer": "",
+    "category": "general_technical",
+    "difficulty": "medium",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "Explain the difference between lambda function and merge sort.",
+    "answer": "",
+    "category": "general_technical",
+    "difficulty": "easy",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "Explain the difference between exception handling and linked list.",
+    "answer": "",
+    "category": "dsa",
+    "difficulty": "medium",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "Explain the difference between linked list and interface.",
+    "answer": "",
+    "category": "dsa",
+    "difficulty": "medium",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "What is list and how is it used?",
+    "answer": "",
+    "category": "general_technical",
+    "difficulty": "hard",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "What is recursion and how is it used?",
+    "answer": "",
+    "category": "dsa",
+    "difficulty": "medium",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "What is inheritance and how is it used?",
+    "answer": "",
+    "category": "general_technical",
+    "difficulty": "medium",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "What is SQL injection and how is it used?",
+    "answer": "",
+    "category": "database",
+    "difficulty": "hard",
+    "tags": [
+      "sql"
+    ],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "What is multithreading and how is it used?",
+    "answer": "",
+    "category": "os",
+    "difficulty": "hard",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "What is garbage collection and how is it used?",
+    "answer": "",
+    "category": "general_technical",
+    "difficulty": "easy",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "What is Big O notation and how is it used?",
+    "answer": "",
+    "category": "dsa",
+    "difficulty": "hard",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "What is virtual memory and how is it used?",
+    "answer": "",
+    "category": "os",
+    "difficulty": "medium",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "What is exception handling and how is it used?",
+    "answer": "",
+    "category": "general_technical",
+    "difficulty": "medium",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "What is binary search and how is it used?",
+    "answer": "",
+    "category": "dsa",
+    "difficulty": "easy",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "How does list work internally?",
+    "answer": "",
+    "category": "general_technical",
+    "difficulty": "hard",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "How does recursion work internally?",
+    "answer": "",
+    "category": "dsa",
+    "difficulty": "hard",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "How does inheritance work internally?",
+    "answer": "",
+    "category": "general_technical",
+    "difficulty": "medium",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "How does SQL injection work internally?",
+    "answer": "",
+    "category": "database",
+    "difficulty": "medium",
+    "tags": [
+      "sql"
+    ],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "How does multithreading work internally?",
+    "answer": "",
+    "category": "os",
+    "difficulty": "medium",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "How does deadlock work internally?",
+    "answer": "",
+    "category": "os",
+    "difficulty": "easy",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "How does garbage collection work internally?",
+    "answer": "",
+    "category": "general_technical",
+    "difficulty": "medium",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "How does Big O notation work internally?",
+    "answer": "",
+    "category": "dsa",
+    "difficulty": "medium",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "How does virtual memory work internally?",
+    "answer": "",
+    "category": "os",
+    "difficulty": "medium",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "How does exception handling work internally?",
+    "answer": "",
+    "category": "general_technical",
+    "difficulty": "medium",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "How does binary search work internally?",
+    "answer": "",
+    "category": "dsa",
+    "difficulty": "medium",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "How does merge sort work internally?",
+    "answer": "",
+    "category": "general_technical",
+    "difficulty": "hard",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "Why is list important in programming?",
+    "answer": "",
+    "category": "general_technical",
+    "difficulty": "medium",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "Why is encapsulation important in programming?",
+    "answer": "",
+    "category": "general_technical",
+    "difficulty": "easy",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "Why is SQL injection important in programming?",
+    "answer": "",
+    "category": "database",
+    "difficulty": "hard",
+    "tags": [
+      "sql"
+    ],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "Why is multithreading important in programming?",
+    "answer": "",
+    "category": "os",
+    "difficulty": "easy",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "Why is garbage collection important in programming?",
+    "answer": "",
+    "category": "general_technical",
+    "difficulty": "hard",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "Why is Big O notation important in programming?",
+    "answer": "",
+    "category": "dsa",
+    "difficulty": "medium",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "Why is virtual memory important in programming?",
+    "answer": "",
+    "category": "os",
+    "difficulty": "medium",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "Why is exception handling important in programming?",
+    "answer": "",
+    "category": "general_technical",
+    "difficulty": "medium",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "Why is binary search important in programming?",
+    "answer": "",
+    "category": "dsa",
+    "difficulty": "medium",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "When would you use list over tuple?",
+    "answer": "",
+    "category": "general_technical",
+    "difficulty": "hard",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "When would you use list over recursion?",
+    "answer": "",
+    "category": "dsa",
+    "difficulty": "hard",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "When would you use list over inheritance?",
+    "answer": "",
+    "category": "general_technical",
+    "difficulty": "hard",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "When would you use list over polymorphism?",
+    "answer": "",
+    "category": "general_technical",
+    "difficulty": "medium",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "When would you use list over multithreading?",
+    "answer": "",
+    "category": "os",
+    "difficulty": "medium",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "When would you use list over deadlock?",
+    "answer": "",
+    "category": "os",
+    "difficulty": "hard",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "When would you use list over garbage collection?",
+    "answer": "",
+    "category": "general_technical",
+    "difficulty": "hard",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "When would you use list over Big O notation?",
+    "answer": "",
+    "category": "dsa",
+    "difficulty": "easy",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "When would you use list over lambda function?",
+    "answer": "",
+    "category": "general_technical",
+    "difficulty": "easy",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "When would you use list over exception handling?",
+    "answer": "",
+    "category": "general_technical",
+    "difficulty": "medium",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "When would you use list over binary search?",
+    "answer": "",
+    "category": "dsa",
+    "difficulty": "hard",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "When would you use tuple over array?",
+    "answer": "",
+    "category": "dsa",
+    "difficulty": "hard",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "When would you use tuple over encapsulation?",
+    "answer": "",
+    "category": "general_technical",
+    "difficulty": "hard",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "When would you use tuple over SQL injection?",
+    "answer": "",
+    "category": "database",
+    "difficulty": "medium",
+    "tags": [
+      "sql"
+    ],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "When would you use tuple over virtual memory?",
+    "answer": "",
+    "category": "os",
+    "difficulty": "hard",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "When would you use tuple over linked list?",
+    "answer": "",
+    "category": "dsa",
+    "difficulty": "easy",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "When would you use array over hashmap?",
+    "answer": "",
+    "category": "dsa",
+    "difficulty": "medium",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "When would you use array over pointers?",
+    "answer": "",
+    "category": "dsa",
+    "difficulty": "easy",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "When would you use hashmap over REST API?",
+    "answer": "",
+    "category": "backend",
+    "difficulty": "hard",
+    "tags": [
+      "rest",
+      "api"
+    ],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "When would you use hashmap over dictionary?",
+    "answer": "",
+    "category": "dsa",
+    "difficulty": "easy",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "When would you use hashmap over merge sort?",
+    "answer": "",
+    "category": "dsa",
+    "difficulty": "medium",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "When would you use hashmap over interface?",
+    "answer": "",
+    "category": "dsa",
+    "difficulty": "medium",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "When would you use recursion over REST API?",
+    "answer": "",
+    "category": "backend",
+    "difficulty": "medium",
+    "tags": [
+      "rest",
+      "api"
+    ],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "When would you use recursion over dictionary?",
+    "answer": "",
+    "category": "dsa",
+    "difficulty": "medium",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "When would you use recursion over merge sort?",
+    "answer": "",
+    "category": "dsa",
+    "difficulty": "medium",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "When would you use inheritance over REST API?",
+    "answer": "",
+    "category": "backend",
+    "difficulty": "hard",
+    "tags": [
+      "rest",
+      "api"
+    ],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "When would you use inheritance over dictionary?",
+    "answer": "",
+    "category": "general_technical",
+    "difficulty": "easy",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "When would you use inheritance over merge sort?",
+    "answer": "",
+    "category": "general_technical",
+    "difficulty": "medium",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "When would you use encapsulation over pointers?",
+    "answer": "",
+    "category": "general_technical",
+    "difficulty": "hard",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "When would you use encapsulation over SQL injection?",
+    "answer": "",
+    "category": "database",
+    "difficulty": "medium",
+    "tags": [
+      "sql"
+    ],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "When would you use encapsulation over virtual memory?",
+    "answer": "",
+    "category": "os",
+    "difficulty": "easy",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "When would you use polymorphism over pointers?",
+    "answer": "",
+    "category": "general_technical",
+    "difficulty": "easy",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "When would you use pointers over stack?",
+    "answer": "",
+    "category": "dsa",
+    "difficulty": "easy",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "When would you use REST API over stack?",
+    "answer": "",
+    "category": "backend",
+    "difficulty": "easy",
+    "tags": [
+      "rest",
+      "api"
+    ],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "When would you use SQL injection over deadlock?",
+    "answer": "",
+    "category": "database",
+    "difficulty": "easy",
+    "tags": [
+      "sql"
+    ],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "When would you use SQL injection over linked list?",
+    "answer": "",
+    "category": "dsa",
+    "difficulty": "easy",
+    "tags": [
+      "sql"
+    ],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "When would you use multithreading over deadlock?",
+    "answer": "",
+    "category": "os",
+    "difficulty": "easy",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "When would you use deadlock over stack?",
+    "answer": "",
+    "category": "dsa",
+    "difficulty": "medium",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "time_complexity_awareness",
+      "code_quality",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "Describe a time you had to resolve a conflict.",
+    "answer": "",
+    "category": "behavioral",
+    "difficulty": "easy",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "star_method_usage",
+      "self_awareness",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "Describe a time you had to lead a team.",
+    "answer": "",
+    "category": "behavioral",
+    "difficulty": "medium",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "star_method_usage",
+      "self_awareness",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "Describe a time you had to meet a deadline.",
+    "answer": "",
+    "category": "behavioral",
+    "difficulty": "easy",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "star_method_usage",
+      "self_awareness",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "Describe a time you had to handle criticism.",
+    "answer": "",
+    "category": "behavioral",
+    "difficulty": "medium",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "star_method_usage",
+      "self_awareness",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "Describe a time you had to adapt to change.",
+    "answer": "",
+    "category": "behavioral",
+    "difficulty": "easy",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "star_method_usage",
+      "self_awareness",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "Describe a time you had to make a tough decision.",
+    "answer": "",
+    "category": "behavioral",
+    "difficulty": "medium",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "star_method_usage",
+      "self_awareness",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "Describe a time you had to work under pressure.",
+    "answer": "",
+    "category": "behavioral",
+    "difficulty": "easy",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "star_method_usage",
+      "self_awareness",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "Describe a time you had to manage multiple tasks.",
+    "answer": "",
+    "category": "behavioral",
+    "difficulty": "hard",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "star_method_usage",
+      "self_awareness",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "Describe a time you had to fail at something.",
+    "answer": "",
+    "category": "behavioral",
+    "difficulty": "medium",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "star_method_usage",
+      "self_awareness",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "Describe a time you had to learn a new skill quickly.",
+    "answer": "",
+    "category": "behavioral",
+    "difficulty": "easy",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "star_method_usage",
+      "self_awareness",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "How do you typically handle situations where you need to resolve a conflict?",
+    "answer": "",
+    "category": "behavioral",
+    "difficulty": "easy",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "star_method_usage",
+      "self_awareness",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "How do you typically handle situations where you need to adapt to change?",
+    "answer": "",
+    "category": "behavioral",
+    "difficulty": "easy",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "star_method_usage",
+      "self_awareness",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "How do you typically handle situations where you need to work under pressure?",
+    "answer": "",
+    "category": "behavioral",
+    "difficulty": "medium",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "star_method_usage",
+      "self_awareness",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "How do you typically handle situations where you need to manage multiple tasks?",
+    "answer": "",
+    "category": "behavioral",
+    "difficulty": "medium",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "star_method_usage",
+      "self_awareness",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "How do you typically handle situations where you need to learn a new skill quickly?",
+    "answer": "",
+    "category": "behavioral",
+    "difficulty": "easy",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "star_method_usage",
+      "self_awareness",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "Give an example of a situation where you resolve a conflict.",
+    "answer": "",
+    "category": "behavioral",
+    "difficulty": "medium",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "star_method_usage",
+      "self_awareness",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "Give an example of a situation where you lead a team.",
+    "answer": "",
+    "category": "behavioral",
+    "difficulty": "medium",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "star_method_usage",
+      "self_awareness",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "Give an example of a situation where you handle criticism.",
+    "answer": "",
+    "category": "behavioral",
+    "difficulty": "hard",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "star_method_usage",
+      "self_awareness",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "Give an example of a situation where you make a tough decision.",
+    "answer": "",
+    "category": "behavioral",
+    "difficulty": "medium",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "star_method_usage",
+      "self_awareness",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "Give an example of a situation where you work under pressure.",
+    "answer": "",
+    "category": "behavioral",
+    "difficulty": "medium",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "star_method_usage",
+      "self_awareness",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "Give an example of a situation where you manage multiple tasks.",
+    "answer": "",
+    "category": "behavioral",
+    "difficulty": "medium",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "star_method_usage",
+      "self_awareness",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "Give an example of a situation where you fail at something.",
+    "answer": "",
+    "category": "behavioral",
+    "difficulty": "hard",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "star_method_usage",
+      "self_awareness",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "Give an example of a situation where you learn a new skill quickly.",
+    "answer": "",
+    "category": "behavioral",
+    "difficulty": "medium",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "star_method_usage",
+      "self_awareness",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "What steps do you take to resolve a conflict?",
+    "answer": "",
+    "category": "behavioral",
+    "difficulty": "hard",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "star_method_usage",
+      "self_awareness",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "What steps do you take to lead a team?",
+    "answer": "",
+    "category": "behavioral",
+    "difficulty": "medium",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "star_method_usage",
+      "self_awareness",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "What steps do you take to meet a deadline?",
+    "answer": "",
+    "category": "behavioral",
+    "difficulty": "hard",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "star_method_usage",
+      "self_awareness",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "What steps do you take to handle criticism?",
+    "answer": "",
+    "category": "behavioral",
+    "difficulty": "hard",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "star_method_usage",
+      "self_awareness",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "What steps do you take to adapt to change?",
+    "answer": "",
+    "category": "behavioral",
+    "difficulty": "medium",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "star_method_usage",
+      "self_awareness",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "What steps do you take to make a tough decision?",
+    "answer": "",
+    "category": "behavioral",
+    "difficulty": "medium",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "star_method_usage",
+      "self_awareness",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "What steps do you take to work under pressure?",
+    "answer": "",
+    "category": "behavioral",
+    "difficulty": "hard",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "star_method_usage",
+      "self_awareness",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "What steps do you take to manage multiple tasks?",
+    "answer": "",
+    "category": "behavioral",
+    "difficulty": "easy",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "star_method_usage",
+      "self_awareness",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "What steps do you take to fail at something?",
+    "answer": "",
+    "category": "behavioral",
+    "difficulty": "medium",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "star_method_usage",
+      "self_awareness",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "What steps do you take to learn a new skill quickly?",
+    "answer": "",
+    "category": "behavioral",
+    "difficulty": "easy",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "star_method_usage",
+      "self_awareness",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "Tell me about a time when you failed to resolve a conflict.",
+    "answer": "",
+    "category": "behavioral",
+    "difficulty": "hard",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "star_method_usage",
+      "self_awareness",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "Tell me about a time when you failed to lead a team.",
+    "answer": "",
+    "category": "behavioral",
+    "difficulty": "easy",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "star_method_usage",
+      "self_awareness",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "Tell me about a time when you failed to handle criticism.",
+    "answer": "",
+    "category": "behavioral",
+    "difficulty": "hard",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "star_method_usage",
+      "self_awareness",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "Tell me about a time when you failed to make a tough decision.",
+    "answer": "",
+    "category": "behavioral",
+    "difficulty": "easy",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "star_method_usage",
+      "self_awareness",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "Tell me about a time when you failed to work under pressure.",
+    "answer": "",
+    "category": "behavioral",
+    "difficulty": "easy",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "star_method_usage",
+      "self_awareness",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "Tell me about a time when you failed to manage multiple tasks.",
+    "answer": "",
+    "category": "behavioral",
+    "difficulty": "medium",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "star_method_usage",
+      "self_awareness",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "Tell me about a time when you failed to fail at something.",
+    "answer": "",
+    "category": "behavioral",
+    "difficulty": "easy",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "star_method_usage",
+      "self_awareness",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "Tell me about a time when you failed to learn a new skill quickly.",
+    "answer": "",
+    "category": "behavioral",
+    "difficulty": "hard",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "star_method_usage",
+      "self_awareness",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "How do you prioritize tasks when you need to resolve a conflict?",
+    "answer": "",
+    "category": "behavioral",
+    "difficulty": "medium",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "star_method_usage",
+      "self_awareness",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "How do you prioritize tasks when you need to meet a deadline?",
+    "answer": "",
+    "category": "behavioral",
+    "difficulty": "hard",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "star_method_usage",
+      "self_awareness",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "How do you prioritize tasks when you need to handle criticism?",
+    "answer": "",
+    "category": "behavioral",
+    "difficulty": "medium",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "star_method_usage",
+      "self_awareness",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "How do you prioritize tasks when you need to adapt to change?",
+    "answer": "",
+    "category": "behavioral",
+    "difficulty": "medium",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "star_method_usage",
+      "self_awareness",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "How do you prioritize tasks when you need to work under pressure?",
+    "answer": "",
+    "category": "behavioral",
+    "difficulty": "easy",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "star_method_usage",
+      "self_awareness",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "How do you prioritize tasks when you need to manage multiple tasks?",
+    "answer": "",
+    "category": "behavioral",
+    "difficulty": "easy",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "star_method_usage",
+      "self_awareness",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "How do you prioritize tasks when you need to learn a new skill quickly?",
+    "answer": "",
+    "category": "behavioral",
+    "difficulty": "hard",
+    "tags": [],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "star_method_usage",
+      "self_awareness",
+      "communication_clarity"
+    ],
+    "source": "kaggle/hr_technical"
+  },
+  {
+    "question": "65 Machine Learning Interview Questions 2026",
+    "answer": "A collection of technical interview questions for machine learning and computer vision engineering positions.",
+    "category": "ml",
+    "difficulty": "medium",
+    "tags": [
+      "machine learning",
+      "machine learning"
+    ],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "mathematical_understanding",
+      "practical_application",
+      "communication_clarity"
+    ],
+    "source": "github/ml_questions"
+  },
+  {
+    "question": "Preparation Resources",
+    "answer": "1. [ML Engineer Interview Course](https://www.tryexponent.com/courses/ml-engineer?ref=zjgwmje&tap_s=5026306-8f044e)\n1. [Mock ML Interview](https://www.tryexponent.com/coaching?ref=zjgwmje&tap_s=5026306-8f044e&category=mock_interviews&src=nav&skill=ml): Get ready for your next interview by practicing with ML engineers from top tech companies and startups.\n1. [All of Statistics: A Concise Course in Statistical Inference](https://amzn.to/3r87WGa) by Larry Wasserman\n2. [Machine Learning](https://amzn.to/3RdiFK3) by Tom Mitchell\n3. [Designing Machine Learning Systems: An Iterative Process for Production-Ready Applications](https://amzn.to/3LiVgD2) by Chip Huyen\n---\nThis page is sponsored by [Jobbyo](https://jobbyo.ai/?linkId=lp_801223&sourceId=akhalel&tenantId=jobbyoai):\n<p align=center style=\"font-style:italic;\">\"If you’re focused on interview prep, let <a href=\"https://jobbyo.ai/?linkId=lp_801223&sourceId=akhalel&tenantId=jobbyoai\">Jobbyo</a> handle the busywork of applying.\nIt automates applications and keeps your job search organized while you stay sharp\"</p>\nUse promo code \"MLQUESTIONS\" at checkout to get 20% off your Premium subscription for 3 months!",
+    "category": "ml",
+    "difficulty": "medium",
+    "tags": [
+      "machine learning"
+    ],
+    "company": "generic",
+    "evaluation_points": [
+      "relevance_to_question",
+      "technical_accuracy",
+      "mathematical_understanding",
+      "practical_application",
+      "communication_clarity"
+    ],
+    "source": "github/ml_questions"
+  }
+]

@@ -14,7 +14,7 @@ class TestPromptManager:
         msgs = pm.build_messages([], difficulty="Medium")
         assert len(msgs) == 2
         assert msgs[0]["role"] == "system"
-        assert "BeaverAI" in msgs[0]["content"]
+        assert "intrv.ai" in msgs[0]["content"]
 
     def test_build_messages_with_history(self):
         from src.brain.prompt_manager import PromptManager

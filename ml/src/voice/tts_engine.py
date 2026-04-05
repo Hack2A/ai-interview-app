@@ -81,29 +81,167 @@ class TTSEngine:
 
     # ── Public API ────────────────────────────────────────────────
 
+    def interrupt(self) -> None:
+        """Interrupts playback immediately and clears the synthesis queues."""
+        self._interrupted = True
+        if hasattr(self, 'interrupt_event'):
+            self.interrupt_event.set()
+        try:
+            sd.stop()
+        except Exception as e:
+            logger.warning(f"Error stopping sounddevice: {e}")
+
     def speak_text(self, text: str) -> None:
         """Speak a single text string synchronously."""
-        print(f"\n[BeaverAI]: {text}")
+        self._interrupted = False
+        print(f"\n[intrv.ai]: {text}")
         self._synthesize_and_play(text)
 
     def speak_stream(self, text_generator: Generator) -> None:
-        """Collect streamed text, print it, then speak the full result."""
+        """Stream sentences to TTS, synthesize concurrently, and play sequentially."""
+        import queue
+        import threading
+
+        self._interrupted = False
+        self.interrupt_event = threading.Event()
+        
+        text_queue = queue.Queue()
+        audio_queue = queue.Queue()
+        
+        # Thread 1: Synthesizer Worker
+        def synthesizer_worker():
+            while not self.interrupt_event.is_set():
+                try:
+                    text = text_queue.get(timeout=0.5)
+                    if text is None:  # EOF
+                        audio_queue.put(None)
+                        break
+                    
+                    audio_path = None
+                    if _edge_tts_available and self._edge_failed_count < self._max_edge_failures:
+                        audio_path = self._synthesize_edge(text)
+                        if not audio_path:
+                            self._edge_failed_count += 1
+                            
+                    if not audio_path and _piper_available:
+                        audio_path = self._synthesize_piper(text)
+                        
+                    if audio_path:
+                        audio_queue.put(audio_path)
+                    text_queue.task_done()
+                except queue.Empty:
+                    continue
+
+        # Thread 2: Player Worker
+        def player_worker():
+            while not self.interrupt_event.is_set():
+                try:
+                    audio_path = audio_queue.get(timeout=0.5)
+                    if audio_path is None:  # EOF
+                        break
+                        
+                    if not self.interrupt_event.is_set():
+                        try:
+                            data, samplerate = sf.read(audio_path, dtype='float32')
+                            sd.play(data, samplerate=samplerate)
+                            # Wait loop that can be interrupted
+                            while sd.get_stream() and sd.get_stream().active and not self.interrupt_event.is_set():
+                                time.sleep(0.05)
+                            
+                            if self.interrupt_event.is_set():
+                                sd.stop()
+                        except Exception as e:
+                            logger.warning(f"Audio playback error: {e}")
+                            
+                        # Cleanup
+                        try:
+                            if os.path.exists(audio_path):
+                                os.remove(audio_path)
+                        except OSError:
+                            pass
+                    audio_queue.task_done()
+                except queue.Empty:
+                    continue
+
+        # Thread 3: Barge-in Interrupt Listener
+        def interrupt_listener():
+            if not self.vad:
+                return
+            try:
+                with sd.InputStream(samplerate=self.vad.sample_rate, channels=1) as stream:
+                    consecutive_speech = 0
+                    local_interrupt_buffer = []
+
+                    while not self.interrupt_event.is_set():
+                        data, _ = stream.read(512)
+                        audio_chunk = data.flatten().astype(np.float32)
+                        
+                        if self.vad._check_speech(audio_chunk, threshold=0.85):
+                            consecutive_speech += 1
+                            local_interrupt_buffer.append(audio_chunk)
+                            
+                            if consecutive_speech >= 3:  
+                                logger.info("Barge-in detected! Interrupting TTS...")
+                                self.vad.interrupt_buffer.extend(local_interrupt_buffer)
+                                self.interrupt()
+                                break
+                        else:
+                            consecutive_speech = 0
+                            local_interrupt_buffer = []
+
+            except Exception as e:
+                logger.warning(f"Interrupt listener error: {e}")
+
+        # Start workers
+        t1 = threading.Thread(target=synthesizer_worker, daemon=True)
+        t2 = threading.Thread(target=player_worker, daemon=True)
+        
+        try:
+            from config import settings
+            enable_barge_in = getattr(settings, 'ENABLE_LOCAL_BARGE_IN', False)
+        except ImportError:
+            enable_barge_in = False
+            
+        t3 = None
+        if enable_barge_in:
+            t3 = threading.Thread(target=interrupt_listener, daemon=True)
+        
+        if self.vad:
+            self.vad.set_mode('speaking')
+            
+        t1.start()
+        t2.start()
+        if t3:
+            t3.start()
+
+        # Producer Loop
         collected = []
+        try:
+            print("\n[intrv.ai]:", end=" ", flush=True)
+            for sentence in text_generator:
+                if self.interrupt_event.is_set():
+                    break
+                if not sentence or not sentence.strip():
+                    continue
+                print(sentence, end=" ", flush=True)
+                collected.append(sentence)
+                text_queue.put(sentence)
+            print()
+        except Exception as e:
+            logger.error(f"Stream interrupted: {e}")
 
-        print("\n[BeaverAI]:", end=" ", flush=True)
-
-        for sentence in text_generator:
-            if not sentence or not sentence.strip():
-                continue
-            print(sentence, end=" ", flush=True)
-            collected.append(sentence)
-
-        print()
-
-        full_text = " ".join(collected).strip()
-        if full_text:
-            self._synthesize_and_play(full_text)
-
+        # Signal completion
+        text_queue.put(None)
+        
+        # Wait for threads to complete cleanly if not interrupted
+        while t1.is_alive() or t2.is_alive():
+            if self.interrupt_event.is_set():
+                break
+            time.sleep(0.1)
+            
+        if self.vad:
+            self.vad.set_mode('listening')
+            
         return None
 
     # ── Core Synthesis ────────────────────────────────────────────

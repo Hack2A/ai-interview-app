@@ -129,29 +129,45 @@ def test_roadmap_mermaid():
     from src.career.roadmap_builder import _generate_mermaid
 
     roadmap = {
+        "topic": "Python Developer",
+        "prerequisites": ["Basic Programming", "Math"],
         "sections": [
             {
                 "phase": "Foundation",
                 "duration_weeks": 4,
-                "topics": ["Python Basics", "Data Structures"],
+                "topics": [
+                    {"name": "Python Basics", "sub_topics": ["Variables", "Loops", "Functions"]},
+                    "Data Structures",
+                ],
                 "projects": ["Build a CLI tool"],
                 "milestones": ["Can write Python scripts"],
             },
             {
                 "phase": "Intermediate",
                 "duration_weeks": 6,
-                "topics": ["Web Frameworks", "APIs"],
+                "topics": [
+                    {"name": "Web Frameworks", "sub_topics": ["Flask", "Django"]},
+                    "APIs",
+                ],
                 "projects": ["Build a REST API"],
                 "milestones": ["Can build web services"],
             },
-        ]
+        ],
+        "certifications": [{"name": "PCAP", "provider": "Python Institute"}],
+        "career_progression": [
+            {"role": "Junior Dev", "experience_needed": "0-1 years", "salary_range": "$50k-$70k"},
+        ],
     }
     mermaid = _generate_mermaid(roadmap)
     assert "flowchart TD" in mermaid
     assert "Foundation" in mermaid
-    assert "mustLearn" in mermaid
-    assert "shouldLearn" in mermaid or "niceToKnow" in mermaid
-    print("  [✓] Test 14: Mermaid flowchart generation")
+    assert "Python Basics" in mermaid
+    assert "Variables" in mermaid  # sub-topic leaf node
+    assert "Prerequisites" in mermaid
+    assert "coreNode" in mermaid
+    assert "practicalNode" in mermaid
+    assert "careerNode" in mermaid
+    print("  [✓] Test 14: Mermaid flowchart generation (hierarchical)")
 
 
 if __name__ == "__main__":

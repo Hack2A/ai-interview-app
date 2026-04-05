@@ -11,7 +11,9 @@ import soundfile as sf
 from config import settings
 from src.brain.evaluator import Evaluator
 from src.brain.llm_engine import LLMEngine
-from src.brain.rag_engine import RAGEngine
+from src.brain.rag_engine import RAGEngine, QuestionBankRAG
+from src.brain.skill_extractor import SkillExtractor
+from src.brain.question_evaluator import QuestionEvaluator
 from src.core.ats_checker import ATSChecker
 from src.core.jd_loader import JDLoader
 from src.core.resume_loader import ResumeLoader
@@ -43,7 +45,7 @@ class InterviewManager:
     """Orchestrates the full interview pipeline: audio capture, LLM, TTS, proctoring, and evaluation."""
 
     def __init__(self) -> None:
-        logger.info("Initializing BeaverAI Engines...")
+        logger.info("Initializing intrv.ai Engines...")
         self.state = SessionState()
 
         self.resume_loader = ResumeLoader()
@@ -78,6 +80,9 @@ class InterviewManager:
         self.brain = None
         self.rag_engine = None
         self.evaluator = None
+        self.question_bank = None
+        self.skill_extractor = SkillExtractor()
+        self.question_evaluator = QuestionEvaluator()
 
         self.next_turn_audio = None
         self.audio_responses = []
@@ -210,7 +215,7 @@ class InterviewManager:
     # ── Session Config ────────────────────────────────────────────
 
     def _configure_session(self):
-        print("\n" + "=" * 40 + "\n      BEAVER AI - SESSION SETUP\n" + "=" * 40)
+        print("\n" + "=" * 40 + "\n      INTRV.AI - SESSION SETUP\n" + "=" * 40)
 
         # ── Step 1: Interview Mode ──
         print("\nSelect interview mode:")
@@ -316,7 +321,7 @@ class InterviewManager:
             return jd_text
 
     def _init_brain(self) -> None:
-        """Initialize LLM, RAG, and evaluator after session config is locked."""
+        """Initialize LLM, RAG, evaluator, and question bank after session config is locked."""
         logger.info("Initializing LLM and RAG engines...")
 
         # Build RAG engine if curated mode with JD text
@@ -337,6 +342,32 @@ class InterviewManager:
 
         self.evaluator = Evaluator(settings.LLM_MODEL_PATH)
 
+        # ── Initialize Question Bank RAG ──
+        if settings.ENABLE_QUESTION_BANK:
+            try:
+                self.question_bank = QuestionBankRAG()
+                if self.question_bank.is_indexed:
+                    logger.info(f"Question bank loaded: {self.question_bank.get_question_count()} questions")
+                else:
+                    # Try to index from question_bank.json
+                    if settings.QUESTION_BANK_PATH.exists():
+                        import json as _json
+                        with open(settings.QUESTION_BANK_PATH, 'r', encoding='utf-8') as f:
+                            questions = _json.load(f)
+                        count = self.question_bank.index_questions(questions)
+                        logger.info(f"Indexed {count} questions from question bank")
+                    else:
+                        logger.info("No question_bank.json found — run ingest_datasets.py first")
+            except Exception as e:
+                logger.warning(f"Question bank init failed: {e}")
+                self.question_bank = None
+
+        # ── Extract resume skills ──
+        if resume_str and self.skill_extractor:
+            skills_data = self.skill_extractor.extract(resume_str)
+            self.state.resume_skills = skills_data.get('skills', [])
+            logger.info(f"Extracted {len(self.state.resume_skills)} skills from resume")
+
     # ── Main Session ──────────────────────────────────────────────
 
     def _speak(self, text: str) -> None:
@@ -346,7 +377,7 @@ class InterviewManager:
         elif hasattr(self.voice_engine, 'speak'):
             self.voice_engine.speak(text, self.detected_language)
         else:
-            print(f"\n[BeaverAI]: {text}")
+            print(f"\n[intrv.ai]: {text}")
 
     def start_session(self):
         self._configure_session()
@@ -437,8 +468,47 @@ class InterviewManager:
                         )
                         continue
 
+                # 1. Evaluate previous RAG answer if there was a context
+                if self.state.current_question_context and self.question_evaluator:
+                    print("[Status] Evaluator is analyzing your answer...")
+                    context = self.state.current_question_context
+                    try:
+                        score_dict = self.question_evaluator.evaluate_answer(
+                            question=context.get("question", ""),
+                            candidate_answer=user_text,
+                            ideal_answer=context.get("answer", ""),
+                            evaluation_points=context.get("evaluation_points", []),
+                            llm_model=self.brain.llm
+                        )
+                        self.state.per_question_scores.append(score_dict)
+                    except Exception as e:
+                        logger.warning(f"Answer evaluation failed: {e}")
+                    
+                    # Clear context so we only evaluate it once
+                    self.state.current_question_context = {}
+
+                # 2. Decide next action & fetch RAG question
+                question_context = None
+                if self.question_bank and self.question_bank.is_indexed:
+                    # Fetch a new question every alternate turn
+                    if self.state.question_count % 2 != 0:
+                        results = self.question_bank.retrieve_by_skills(
+                            skills=self.state.resume_skills,
+                            difficulty=self.state.difficulty.lower(),
+                            top_k=1,
+                            exclude_ids=self.state.asked_question_ids
+                        )
+                        if results:
+                            question_context = results[0]
+                            self.state.asked_question_ids.append(question_context["id"])
+                            self.state.current_question_context = question_context
+
                 print("[Status] Thinking...")
-                response_generator = self.brain.generate_stream(user_text, self.state.difficulty)
+                response_generator = self.brain.generate_stream(
+                    user_text, 
+                    self.state.difficulty,
+                    question_context=question_context
+                )
 
                 print("[Status] Generating response...")
                 if hasattr(self.voice_engine, 'speak_stream'):
@@ -463,16 +533,44 @@ class InterviewManager:
 
     def _generate_opening_question(self) -> None:
         """Generate the first interview question based on resume/JD context."""
-        opening_prompt = self.brain.prompt_manager.get_opening_prompt(self.state.difficulty)
+        
+        question_context = None
+        if self.question_bank and self.question_bank.is_indexed:
+            results = self.question_bank.retrieve_by_skills(
+                skills=self.state.resume_skills,
+                difficulty=self.state.difficulty.lower(),
+                top_k=1,
+                exclude_ids=self.state.asked_question_ids
+            )
+            if results:
+                question_context = results[0]
+                self.state.asked_question_ids.append(question_context["id"])
+                self.state.current_question_context = question_context
 
         print("[Status] Preparing first question...")
-        response_generator = self.brain.generate_stream(opening_prompt, self.state.difficulty)
+        
+        # Bypass LLM generation entirely for the first question to achieve instant startup
+        def instant_question_generator():
+            yield "Hello, let's begin the interview. "
+            if question_context and "question" in question_context:
+                yield question_context["question"] + " "
+            else:
+                yield "Could you start by walking me through your background? "
+
+        # Eagerly evaluate the string so we can inject it into the LLM history
+        first_q_str = "Hello, let's begin the interview. "
+        if question_context and "question" in question_context:
+            first_q_str += question_context["question"]
+        else:
+            first_q_str += "Could you start by walking me through your background?"
+
+        if self.brain:
+            self.brain.history.append({"role": "assistant", "content": first_q_str})
 
         if hasattr(self.voice_engine, 'speak_stream'):
-            self.voice_engine.speak_stream(response_generator)
+            self.voice_engine.speak_stream(instant_question_generator())
         else:
-            response_text = "".join(list(response_generator))
-            self._speak(response_text)
+            self._speak(first_q_str)
 
     # ── End Session ───────────────────────────────────────────────
 
@@ -489,7 +587,10 @@ class InterviewManager:
             history = self.brain.get_history()
 
             print(f"\n[Report] Generating evaluation report...")
-            report = self.evaluator.generate_report(history)
+            report = self.evaluator.generate_report(
+                history,
+                per_question_scores=self.state.per_question_scores or None,
+            )
             report["transcript"] = history
 
             if self.sentiment_analyzer and self.audio_responses:
@@ -527,6 +628,27 @@ class InterviewManager:
                 try:
                     violations_summary = self.proctoring.get_violations_summary()
                     report["proctoring"] = violations_summary
+
+                    # Print enriched risk summary
+                    risk_score = violations_summary.get("current_risk_score", 0)
+                    peak_score = violations_summary.get("peak_risk_score", 0)
+                    severity = violations_summary.get("severity", "low")
+                    total = violations_summary.get("total_violations", 0)
+
+                    print(f"\n┌─────────────────────────────────────────┐")
+                    print(f"│  🔍 PROCTORING RISK REPORT              │")
+                    print(f"├─────────────────────────────────────────┤")
+                    print(f"│  Total Violations:  {total:<20}│")
+                    print(f"│  Final Risk Score:  {risk_score:<20.1%}│")
+                    print(f"│  Peak Risk Score:   {peak_score:<20.1%}│")
+                    print(f"│  Severity:          {severity.upper():<20}│")
+                    print(f"└─────────────────────────────────────────┘")
+
+                    counts = violations_summary.get("violation_counts", {})
+                    if counts:
+                        print("  Breakdown:")
+                        for vtype, count in sorted(counts.items(), key=lambda x: -x[1]):
+                            print(f"    • {vtype.replace('_', ' ')}: {count}")
                 except Exception as e:
                     logger.warning(f"Proctoring summary failed: {e}")
 

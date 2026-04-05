@@ -19,6 +19,13 @@ class SessionState:
     is_active: bool = True
     started_at: float = field(default_factory=time.time)
 
+    # ── RAG Question Bank tracking ────────────────────────────────
+    asked_questions: list = field(default_factory=list)
+    per_question_scores: list = field(default_factory=list)
+    resume_skills: list = field(default_factory=list)
+    current_question_context: dict = field(default_factory=dict)
+    asked_question_ids: list = field(default_factory=list)
+
     def update_difficulty(self, new_diff: str) -> bool:
         """Update difficulty if valid. Returns True on success."""
         if new_diff not in VALID_DIFFICULTIES:
@@ -60,6 +67,9 @@ class SessionState:
             "is_active": self.is_active,
             "started_at": self.started_at,
             "elapsed_seconds": round(self.elapsed_seconds(), 1),
+            "asked_questions_count": len(self.asked_questions),
+            "per_question_scores_count": len(self.per_question_scores),
+            "resume_skills": self.resume_skills[:20],
         }
 
     def __repr__(self) -> str:

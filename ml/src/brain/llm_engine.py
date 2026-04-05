@@ -46,11 +46,11 @@ class LLMEngine:
         self._is_first_call = True
 
 
-    def generate_stream(self, user_input: str, difficulty: str = "Medium") -> Generator[str, None, None]:
+    def generate_stream(self, user_input: str, difficulty: str = "Medium", question_context: dict | None = None) -> Generator[str, None, None]:
         """Stream LLM response token-by-token, yielding sentence fragments."""
         
         self.history.append({"role": "user", "content": user_input})
-        messages = self.prompt_manager.build_messages(self.history, difficulty)
+        messages = self.prompt_manager.build_messages(self.history, difficulty, question_context=question_context)
 
         logger.info(f"Generating LLM response for: {user_input[:50]}...")
         

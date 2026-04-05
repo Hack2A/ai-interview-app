@@ -62,6 +62,10 @@ test_output.log
 *.key
 secrets.json
 credentials.json
+kaggle.json
+
+# ─── Datasets (raw downloads — too large for git) ────
+data/datasets/raw/
 
 # ─── Audio temp files ─────────────────────────────────
 *.wav

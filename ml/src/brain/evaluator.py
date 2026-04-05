@@ -27,10 +27,16 @@ class Evaluator:
                 verbose=False,
             )
 
-    def generate_report(self, history: list[dict]) -> dict:
-        """Generate a structured evaluation report from interview history."""
+    def generate_report(self, history: list[dict],
+                        per_question_scores: list[dict] | None = None) -> dict:
+        """Generate a structured evaluation report from interview history.
+
+        Args:
+            history: Full conversation history.
+            per_question_scores: Optional per-question evaluations from QuestionEvaluator.
+        """
         logger.info("Generating Final Evaluation Report...")
-        
+
         if len(history) < 1:
             return {
                 "score": 0,
@@ -77,7 +83,19 @@ class Evaluator:
                 temperature=EVAL_TEMPERATURE,
                 response_format={"type": "json_object"}
             )
-            return json.loads(output['choices'][0]['message']['content'])
+            report = json.loads(output['choices'][0]['message']['content'])
+
+            # Attach per-question scores if available
+            if per_question_scores:
+                report["per_question_evaluations"] = per_question_scores
+
+                # Aggregate per-question metrics
+                from src.brain.question_evaluator import QuestionEvaluator
+                aggregator = QuestionEvaluator()
+                report["question_bank_summary"] = aggregator.aggregate_scores(per_question_scores)
+
+            return report
+
         except Exception as e:
             logger.error(f"Failed to generate evaluation: {e}", exc_info=True)
             return {

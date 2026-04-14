@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
+import { useRouter } from "next/navigation";
 import { useNavbar } from "../../NavbarContext";
 import DifficultyStep from "@/components/interview/newInterview/DifficultyStep";
 import InterviewTypeStep from "@/components/interview/newInterview/InterviewTypeStep";
@@ -10,8 +11,11 @@ import ResumeStep from "@/components/interview/newInterview/ResumeStep";
 import StepIndicator from "@/components/interview/newInterview/StepIndicator";
 import WizardActions from "@/components/interview/newInterview/WizardActions";
 import { BackendInterviewPayload, DeviceStatus, InterviewFormData } from "@/types/Interivewtypes";
+import { saveInterviewConfig } from "@/hooks/useInterview";
+import type { SessionDifficulty } from "@/types/interviewServiceTypes";
 
 export default function NewInterview() {
+    const router = useRouter();
     const [currentStep, setCurrentStep] = useState(1);
     const [cameraStatus, setCameraStatus] = useState<DeviceStatus>("idle");
     const [microphoneStatus, setMicrophoneStatus] = useState<DeviceStatus>("idle");
@@ -173,9 +177,53 @@ export default function NewInterview() {
         };
     };
 
-    const onSubmit = (data: InterviewFormData) => {
+    /** Convert a File to a base64 string (without the data:… prefix). */
+    const fileToBase64 = (file: File): Promise<string> =>
+        new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+                const result = reader.result as string;
+                // Strip the "data:application/pdf;base64," prefix
+                const base64 = result.split(",")[1] || result;
+                resolve(base64);
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+        });
+
+    /** Map form difficulty values to backend SessionDifficulty. */
+    const mapDifficulty = (d: string): SessionDifficulty => {
+        const map: Record<string, SessionDifficulty> = {
+            easy: "Easy",
+            medium: "Medium",
+            hard: "Hard",
+            extreme: "Extreme",
+        };
+        return map[d] ?? "Medium";
+    };
+
+    const onSubmit = async (data: InterviewFormData) => {
         const payload = buildPayload(data);
         console.log("Interview setup payload", payload);
+
+        // Read resume as base64 PDF if a new file was uploaded
+        let resumeBase64: string | undefined;
+        if (data.resumeMode === "new" && data.newResume?.[0]) {
+            resumeBase64 = await fileToBase64(data.newResume[0]);
+        }
+
+        // Save config for the live interview page to pick up
+        saveInterviewConfig({
+            resumeBase64,
+            jdText: data.interviewType === "curated" ? data.jobDescription.trim() : undefined,
+            difficulty: mapDifficulty(data.difficulty),
+            mode: data.interviewType === "curated" ? "curated" : "generic",
+            interviewType: "technical",
+            proctoring: data.aiProctoring,
+        });
+
+        // Redirect to the live interview page
+        router.push("/interview/live");
     };
 
     return (

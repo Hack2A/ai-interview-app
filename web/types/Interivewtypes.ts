@@ -1,6 +1,6 @@
 export type ResumeMode = "new" | "existing";
 export type InterviewType = "generic" | "curated";
-export type Difficulty = "easy" | "medium" | "difficult";
+export type Difficulty = "easy" | "medium" | "hard" | "extreme";
 export type DeviceStatus = "idle" | "checking" | "ready" | "blocked";
 
 export type InterviewFormData = {

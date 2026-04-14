@@ -5,33 +5,46 @@ interface UseRealtimeStreamOptions {
 	autoStart?: boolean;
 }
 
+/**
+ * Hook that captures audio from a MediaStream via MediaRecorder
+ * and sends binary chunks through a provided callback.
+ *
+ * The callback is typically `interviewHook.sendAudio` from useInterview,
+ * which forwards chunks to the InterviewWebSocket.
+ */
 export function useRealtimeStream(
 	stream: MediaStream | null,
-	options: UseRealtimeStreamOptions = {}
+	sendAudio: (data: Blob) => void,
+	options: UseRealtimeStreamOptions = {},
 ) {
 	const { autoStart = false } = options;
 
-	const wsRef = useRef<WebSocket | null>(null);
 	const mediaRecorderRef = useRef<MediaRecorder | null>(null);
 	const isStreamingRef = useRef(false);
+	const sendAudioRef = useRef(sendAudio);
 
 	const [isStreaming, setIsStreaming] = useState(false);
 
-	// keep ref in sync
+	// Keep refs in sync
 	useEffect(() => {
 		isStreamingRef.current = isStreaming;
 	}, [isStreaming]);
 
-	// auto-start streaming when stream becomes available
+	useEffect(() => {
+		sendAudioRef.current = sendAudio;
+	}, [sendAudio]);
+
+	// Auto-start when stream becomes available
 	useEffect(() => {
 		if (!stream) return;
 
 		if (autoStart && !isStreamingRef.current) {
 			startStreaming();
 		} else if (isStreamingRef.current) {
-			// restart on device switch
+			// Restart on device switch
 			restartStreaming();
 		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [stream]);
 
 	const startStreaming = () => {
@@ -44,31 +57,9 @@ export function useRealtimeStream(
 				mimeType: "audio/webm;codecs=opus",
 			});
 
-			const ws = new WebSocket("ws://localhost:8000/ws/interview");
-
-			ws.onopen = () => {
-				console.log("✅ WebSocket connected");
-				recorder.start(250); // chunk every 250ms
-				setIsStreaming(true);
-			};
-
-			ws.onerror = (err) => {
-				console.error("❌ WebSocket error:", err);
-				stopStreaming();
-			};
-
-			ws.onclose = () => {
-				console.log("🔌 WebSocket closed");
-				setIsStreaming(false);
-			};
-
 			recorder.ondataavailable = (event) => {
-				if (
-					event.data.size > 0 &&
-					ws.readyState === WebSocket.OPEN &&
-					ws.bufferedAmount < 1_000_000 // basic backpressure check
-				) {
-					ws.send(event.data);
+				if (event.data.size > 0) {
+					sendAudioRef.current(event.data);
 				}
 			};
 
@@ -80,8 +71,10 @@ export function useRealtimeStream(
 				console.log("🎙️ Recorder stopped");
 			};
 
-			wsRef.current = ws;
+			recorder.start(250); // chunk every 250ms
 			mediaRecorderRef.current = recorder;
+			setIsStreaming(true);
+			console.log("✅ Audio streaming started");
 		} catch (err) {
 			console.error("❌ Failed to start streaming:", err);
 		}
@@ -90,15 +83,10 @@ export function useRealtimeStream(
 	const stopStreaming = () => {
 		try {
 			if (mediaRecorderRef.current) {
-				mediaRecorderRef.current.stop();
-				mediaRecorderRef.current = null;
-			}
-
-			if (wsRef.current) {
-				if (wsRef.current.readyState === WebSocket.OPEN) {
-					wsRef.current.close();
+				if (mediaRecorderRef.current.state !== "inactive") {
+					mediaRecorderRef.current.stop();
 				}
-				wsRef.current = null;
+				mediaRecorderRef.current = null;
 			}
 		} catch (err) {
 			console.error("❌ Stop error:", err);
@@ -107,20 +95,19 @@ export function useRealtimeStream(
 		}
 	};
 
-	const restartStreaming = async () => {
+	const restartStreaming = () => {
 		stopStreaming();
-
-		// wait for cleanup (important)
 		setTimeout(() => {
 			startStreaming();
 		}, 100);
 	};
 
-	// cleanup on unmount
+	// Cleanup on unmount
 	useEffect(() => {
 		return () => {
 			stopStreaming();
 		};
+		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []);
 
 	return {

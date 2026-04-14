@@ -10,7 +10,8 @@ type DifficultyStepProps = {
 const options = [
     { key: "easy", label: "Easy", hint: "Warm-up and basics" },
     { key: "medium", label: "Medium", hint: "Balanced depth" },
-    { key: "difficult", label: "Difficult", hint: "Advanced challenge" },
+    { key: "hard", label: "Hard", hint: "Advanced challenge" },
+    { key: "extreme", label: "Extreme", hint: "Expert-level gauntlet" },
 ] as const;
 
 export default function DifficultyStep({ difficulty, register, errors }: DifficultyStepProps) {
@@ -21,7 +22,7 @@ export default function DifficultyStep({ difficulty, register, errors }: Difficu
                 <p className="text-sm text-slate-600">Select the level for this interview session.</p>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-4">
                 {options.map((option) => (
                     <label
                         key={option.key}

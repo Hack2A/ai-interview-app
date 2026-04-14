@@ -1,5 +1,5 @@
 @import "tailwindcss";
-@import "./liveInterview.css";
+@import "../styles/liveInterview.css";
 
 /* :root {
   --background: #ffffff;

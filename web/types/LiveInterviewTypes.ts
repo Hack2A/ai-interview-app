@@ -1,8 +1,3 @@
-export type MediaDeviceOption = {
-    deviceId: string;
-    label: string;
-    kind: "audioinput" | "audiooutput" | "videoinput";
-};
 
 export type TranscriptEntry = {
     id: string;
@@ -21,11 +16,12 @@ export type InterviewHeaderProps = {
     status: InterviewStatus;
 };
 
-export type VideoAreaProps = {
+export interface VideoAreaProps {
     isVideoOff: boolean;
     isMuted: boolean;
     userName?: string;
-};
+    stream: MediaStream | null;
+}
 
 export type ControlBarProps = {
     isMuted: boolean;
@@ -39,12 +35,12 @@ export type ControlBarProps = {
 export type SettingsModalProps = {
     isOpen: boolean;
     onClose: () => void;
-    cameras: MediaDeviceOption[];
-    microphones: MediaDeviceOption[];
-    speakers: MediaDeviceOption[];
-    selectedCamera: string;
-    selectedMicrophone: string;
-    selectedSpeaker: string;
+    cameras: MediaDeviceInfo[];
+    microphones: MediaDeviceInfo[];
+    speakers: MediaDeviceInfo[];
+    selectedCamera?: string;
+    selectedMicrophone?: string;
+    selectedSpeaker?: string;
     onCameraChange: (deviceId: string) => void;
     onMicrophoneChange: (deviceId: string) => void;
     onSpeakerChange: (deviceId: string) => void;
@@ -52,6 +48,4 @@ export type SettingsModalProps = {
 
 export type TranscriptPanelProps = {
     entries: TranscriptEntry[];
-    activeTab: TranscriptTab;
-    onTabChange: (tab: TranscriptTab) => void;
 };

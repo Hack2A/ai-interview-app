@@ -409,6 +409,10 @@ class ProctoringEngine:
                     if "earpiece_suspected" not in violations:
                         violations.append("phone_near_ear")
 
+        # For the time being, keep only the requested violations
+        allowed_violations = {"user_left", "multiple_people"}
+        violations = [v for v in violations if v in allowed_violations]
+
         return violations, metadata
 
     def cleanup(self) -> None:

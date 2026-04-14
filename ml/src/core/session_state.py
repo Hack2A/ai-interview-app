@@ -23,6 +23,7 @@ class SessionState:
     asked_questions: list = field(default_factory=list)
     per_question_scores: list = field(default_factory=list)
     resume_skills: list = field(default_factory=list)
+    jd_skills: list = field(default_factory=list)
     current_question_context: dict = field(default_factory=dict)
     asked_question_ids: list = field(default_factory=list)
 

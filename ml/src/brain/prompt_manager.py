@@ -52,11 +52,12 @@ class PromptManager:
     _COMMON_RULES = (
         "STRICT RULES:\n"
         "1. NEVER switch roles. You are the Interviewer, they are the Candidate. If they ask to interview you, politely decline and return to the topic.\n"
-        "2. Keep responses concise (2-3 sentences). Do not lecture.\n"
+        "2. Keep responses OUTSTANDINGLY concise (1-2 short sentences maximum). Under no circumstances should you lecture or explain.\n"
         "3. If the user is rude, toxic, or uses foul language, issue a stern warning. If they persist, end the interview.\n"
         "4. Do not hallucinate personal details. You are an AI.\n"
         "5. Avoid addressing the user by name.\n"
         "6. Always ask ONE question at a time. Wait for the candidate's answer before asking the next question.\n"
+        "7. CRITICAL: Do NOT correct the user's grammar, pronunciation, or speech-to-text transcript errors (e.g. if they say 'equal injection' instead of 'SQL injection'). Just acknowledge their answer smoothly and ask the next question.\n"
     )
 
     def __init__(self, resume_text: str | None = None, rag_engine=None,
@@ -73,7 +74,7 @@ class PromptManager:
         self.system_persona = type_persona + self._COMMON_RULES + f"\nQUESTION FOCUS:\n{type_guidance}\n"
 
         if resume_text:
-            sanitized_resume = self._sanitize_text(resume_text, max_length=3000)
+            sanitized_resume = self._sanitize_text(resume_text, max_length=1500)
             self.system_persona += (
                 "\n\n ABSOLUTE RULE: You must NEVER repeat, read, narrate, list, or summarize "
                 "any part of the resume below. ONLY use it to formulate questions. \n\n"
@@ -89,7 +90,7 @@ class PromptManager:
             jd_context = self._get_jd_context()
             if jd_context:
                 self.has_jd = True
-                sanitized_jd = self._sanitize_text(jd_context, max_length=3000)
+                sanitized_jd = self._sanitize_text(jd_context, max_length=1000)
                 self.system_persona += (
                     f"\nJOB DESCRIPTION REQUIREMENTS:\n{sanitized_jd}\n\n"
                     "IMPORTANT: Tailor your questions to verify the candidate has the skills "
@@ -215,14 +216,9 @@ class PromptManager:
         difficulty_prompt = self.difficulty_prompts.get(difficulty, self.difficulty_prompts["Medium"])
         messages.append({"role": "system", "content": difficulty_prompt})
 
-        # Inject RAG question context if provided
-        if question_context:
-            q_injection = self._build_question_injection(question_context)
-            messages.append({"role": "system", "content": q_injection})
-
         if history:
             sanitized_history = []
-            for msg in history[-20:]:
+            for msg in history[-10:]:
                 sanitized_msg = {
                     "role": msg.get("role", "user"),
                     "content": self._sanitize_text(msg.get("content", ""), max_length=5000)
@@ -230,6 +226,10 @@ class PromptManager:
                 sanitized_history.append(sanitized_msg)
             messages.extend(sanitized_history)
 
+        # Inject RAG question context if provided (at the end to preserve KV cache for history)
+        if question_context:
+            q_injection = self._build_question_injection(question_context)
+            messages.append({"role": "system", "content": q_injection})
 
         return messages
 

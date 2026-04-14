@@ -368,6 +368,12 @@ class InterviewManager:
             self.state.resume_skills = skills_data.get('skills', [])
             logger.info(f"Extracted {len(self.state.resume_skills)} skills from resume")
 
+        # ── Extract JD skills ──
+        if self.jd_text and self.skill_extractor:
+            jd_skills_data = self.skill_extractor.extract(self.jd_text)
+            self.state.jd_skills = jd_skills_data.get('skills', [])
+            logger.info(f"Extracted {len(self.state.jd_skills)} skills from JD")
+
     # ── Main Session ──────────────────────────────────────────────
 
     def _speak(self, text: str) -> None:
@@ -469,53 +475,72 @@ class InterviewManager:
                         continue
 
                 # 1. Evaluate previous RAG answer if there was a context
+                # DISABLED: the user requested to stop per-question evaluation to reduce LLM load
                 if self.state.current_question_context and self.question_evaluator:
-                    print("[Status] Evaluator is analyzing your answer...")
-                    context = self.state.current_question_context
-                    try:
-                        score_dict = self.question_evaluator.evaluate_answer(
-                            question=context.get("question", ""),
-                            candidate_answer=user_text,
-                            ideal_answer=context.get("answer", ""),
-                            evaluation_points=context.get("evaluation_points", []),
-                            llm_model=self.brain.llm
-                        )
-                        self.state.per_question_scores.append(score_dict)
-                    except Exception as e:
-                        logger.warning(f"Answer evaluation failed: {e}")
-                    
-                    # Clear context so we only evaluate it once
+                    # Clear context so we don't hold onto it
                     self.state.current_question_context = {}
 
                 # 2. Decide next action & fetch RAG question
                 question_context = None
                 if self.question_bank and self.question_bank.is_indexed:
-                    # Fetch a new question every alternate turn
-                    if self.state.question_count % 2 != 0:
-                        results = self.question_bank.retrieve_by_skills(
-                            skills=self.state.resume_skills,
+                    # Topic switch every 3rd question, otherwise context-based follow-up
+                    if self.state.question_count % 3 == 0:
+                        combined_skills = self.state.resume_skills + getattr(self.state, 'jd_skills', [])
+                        import random
+                        if combined_skills:
+                            query_str = random.choice(combined_skills)
+                        else:
+                            query_str = "general engineering"
+                            
+                        results = self.question_bank.retrieve_questions(
+                            query=query_str,
                             difficulty=self.state.difficulty.lower(),
-                            top_k=1,
+                            top_k=5,
+                            exclude_ids=self.state.asked_question_ids
+                        )
+                        if results:
+                            question_context = random.choice(results)
+                    else:
+                        # Contextual follow-up based on user's preceding answer
+                        results = self.question_bank.retrieve_questions(
+                            query=user_text[:300],
+                            difficulty=self.state.difficulty.lower(),
+                            top_k=3,
                             exclude_ids=self.state.asked_question_ids
                         )
                         if results:
                             question_context = results[0]
-                            self.state.asked_question_ids.append(question_context["id"])
-                            self.state.current_question_context = question_context
+                    
+                    if question_context:
+                        self.state.asked_question_ids.append(question_context["id"])
+                        self.state.current_question_context = question_context
 
-                print("[Status] Thinking...")
-                response_generator = self.brain.generate_stream(
-                    user_text, 
-                    self.state.difficulty,
-                    question_context=question_context
-                )
-
-                print("[Status] Generating response...")
-                if hasattr(self.voice_engine, 'speak_stream'):
-                    self.next_turn_audio = self.voice_engine.speak_stream(response_generator)
+                # ── Fast path: speak RAG question directly (no LLM needed) ──
+                if question_context:
+                    import random
+                    ack_phrases = [
+                        "Alright.", "Okay.", "Got it.", "Sure.",
+                        "Thanks for that.", "Understood.", "Good.",
+                        "Interesting.", "Noted.", "Fair enough.",
+                    ]
+                    ack = random.choice(ack_phrases)
+                    q_text = question_context.get("question", "")
+                    self._speak(f"{ack} {q_text}")
                 else:
-                    response_text = "".join(list(response_generator))
-                    self._speak(response_text)
+                    # ── Slow path: LLM free-form (only when no RAG question) ──
+                    print("[Status] Thinking...")
+                    response_generator = self.brain.generate_stream(
+                        user_text,
+                        self.state.difficulty,
+                        question_context=None
+                    )
+
+                    print("[Status] Generating response...")
+                    if hasattr(self.voice_engine, 'speak_stream'):
+                        self.next_turn_audio = self.voice_engine.speak_stream(response_generator)
+                    else:
+                        response_text = "".join(list(response_generator))
+                        self._speak(response_text)
 
                 self.audio_responses.append(str(temp_wav))
                 self.state.question_count += 1
@@ -536,14 +561,17 @@ class InterviewManager:
         
         question_context = None
         if self.question_bank and self.question_bank.is_indexed:
+            combined_skills = self.state.resume_skills + getattr(self.state, 'jd_skills', [])
+            
             results = self.question_bank.retrieve_by_skills(
-                skills=self.state.resume_skills,
+                skills=combined_skills,
                 difficulty=self.state.difficulty.lower(),
-                top_k=1,
+                top_k=10,
                 exclude_ids=self.state.asked_question_ids
             )
             if results:
-                question_context = results[0]
+                import random
+                question_context = random.choice(results)
                 self.state.asked_question_ids.append(question_context["id"])
                 self.state.current_question_context = question_context
 

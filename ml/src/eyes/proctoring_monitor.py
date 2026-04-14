@@ -256,8 +256,24 @@ class ProctoringMonitor:
                         self._last_risk_score = self.risk_scorer.get_risk_score()
                         self._last_alert_level = self.risk_scorer.get_alert_level()
 
-                # Sleep slightly to prevent maxing out CPU if frame capture is too fast
-                # We do not use imshow anymore, doing silent background capture
+                # Display video window with basic HUD
+                with self._lock:
+                    score = self._last_risk_score
+                    alert = self._last_alert_level
+                    
+                color = (0, 220, 0) # Green for clear/info
+                if alert == "warning": color = (0, 220, 255) # Yellow
+                elif alert == "critical": color = (0, 0, 255) # Red
+                
+                # Draw risk score on frame
+                cv2.putText(frame, f"Risk Score: {score:.2f} ({alert.upper()})", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, color, 2)
+                cv2.imshow("intrv.ai - Proctoring Monitor", frame)
+                
+                # Check for 'q' quit key
+                if cv2.waitKey(1) & 0xFF == ord('q'):
+                    self.is_running = False
+                    break
+
                 elapsed = time.time() - loop_start
                 sleep_time = (1.0 / 30.0) - elapsed
                 if sleep_time > 0:
@@ -327,6 +343,7 @@ class ProctoringMonitor:
         try:
             if self.cap:
                 self.cap.release()
+            cv2.destroyAllWindows()
         except (cv2.error, OSError) as e:
             logger.warning(f"Failed to release webcam: {e}")
 

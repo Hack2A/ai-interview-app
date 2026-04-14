@@ -155,11 +155,14 @@ def extract_from_github(repo_url: str) -> dict:
     """Extract project info from a public GitHub repo URL.
 
     Uses the GitHub REST API (no auth needed for public repos).
+    Set GITHUB_TOKEN env var to avoid rate limiting.
     """
     try:
         import requests
     except ImportError:
         return {"error": "requests library not installed. Run: pip install requests"}
+
+    import os
 
     # Parse owner/repo from URL
     match = re.match(
@@ -171,10 +174,22 @@ def extract_from_github(repo_url: str) -> dict:
     owner, repo = match.group(1), match.group(2).rstrip(".git")
     api_url = f"https://api.github.com/repos/{owner}/{repo}"
 
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "intrv-ai-career-suite/1.0",
+    }
+    token = os.environ.get("GITHUB_TOKEN", "")
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
     try:
-        resp = requests.get(api_url, timeout=10)
+        resp = requests.get(api_url, headers=headers, timeout=10)
+        if resp.status_code == 404:
+            return {"error": f"Repo not found or private: {owner}/{repo}. If private, set GITHUB_TOKEN env var."}
+        if resp.status_code == 403:
+            return {"error": "GitHub API rate limit hit. Set GITHUB_TOKEN env var or wait a few minutes."}
         if resp.status_code != 200:
-            return {"error": f"GitHub API returned {resp.status_code}"}
+            return {"error": f"GitHub API returned {resp.status_code}: {resp.text[:200]}"}
 
         data = resp.json()
         project = {
@@ -192,7 +207,7 @@ def extract_from_github(repo_url: str) -> dict:
         }
 
         # Try to get languages breakdown
-        lang_resp = requests.get(f"{api_url}/languages", timeout=10)
+        lang_resp = requests.get(f"{api_url}/languages", headers=headers, timeout=10)
         if lang_resp.status_code == 200:
             project["tech_stack"] = list(lang_resp.json().keys())
 

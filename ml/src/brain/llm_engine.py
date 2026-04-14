@@ -20,6 +20,7 @@ STREAM_TIMEOUT_SECONDS = 120  # Gemma4 thinks before responding — give it time
 OLLAMA_BASE_URL = "http://localhost:11434"
 OLLAMA_CHAT_URL = f"{OLLAMA_BASE_URL}/api/chat"
 OLLAMA_MODEL = "gemma4"
+OLLAMA_CAREER_MODEL = "career-llama3:latest"  # Meta-Llama-3-8B for career features
 
 
 class OllamaClient:

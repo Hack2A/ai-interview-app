@@ -210,11 +210,10 @@ class PromptManager:
             difficulty: Current difficulty level.
             question_context: Optional RAG-retrieved question with ideal answer.
         """
-
-        messages = [{"role": "system", "content": self.system_persona}]
-
+        # Merge difficulty into the system persona — Gemma4 only allows ONE system message.
         difficulty_prompt = self.difficulty_prompts.get(difficulty, self.difficulty_prompts["Medium"])
-        messages.append({"role": "system", "content": difficulty_prompt})
+        merged_system = self.system_persona + f"\n\nCURRENT DIFFICULTY: {difficulty_prompt}"
+        messages = [{"role": "system", "content": merged_system}]
 
         if history:
             sanitized_history = []
@@ -224,12 +223,18 @@ class PromptManager:
                     "content": self._sanitize_text(msg.get("content", ""), max_length=5000)
                 }
                 sanitized_history.append(sanitized_msg)
+            
+            # Inject RAG question context into the LAST user message if provided
+            if question_context and sanitized_history:
+                q_injection = self._build_question_injection(question_context)
+                if sanitized_history[-1]["role"] == "user":
+                    sanitized_history[-1]["content"] += f"\n\n[SYSTEM INSTRUCTION: {q_injection}]"
+                    
             messages.extend(sanitized_history)
-
-        # Inject RAG question context if provided (at the end to preserve KV cache for history)
-        if question_context:
+        elif question_context:
+            # If no history exists, append a user message with the injection
             q_injection = self._build_question_injection(question_context)
-            messages.append({"role": "system", "content": q_injection})
+            messages.append({"role": "user", "content": q_injection})
 
         return messages
 

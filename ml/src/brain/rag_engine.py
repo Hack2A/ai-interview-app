@@ -125,11 +125,23 @@ class QuestionBankRAG:
 
         settings.CHROMADB_DIR.mkdir(parents=True, exist_ok=True)
         self.client = chromadb.PersistentClient(path=str(settings.CHROMADB_DIR))
-        self.collection = self.client.get_or_create_collection(
-            name="question_bank",
-            metadata={"hnsw:space": "cosine"},
-        )
-        self._indexed = self.collection.count() > 0
+        try:
+            self.collection = self.client.get_or_create_collection(
+                name="question_bank",
+                metadata={"hnsw:space": "cosine"},
+            )
+            self._indexed = self.collection.count() > 0
+        except Exception as e:
+            logger.warning(f"Corrupted question_bank collection detected: {e}. Recreating...")
+            try:
+                self.client.delete_collection("question_bank")
+            except:
+                pass
+            self.collection = self.client.get_or_create_collection(
+                name="question_bank",
+                metadata={"hnsw:space": "cosine"},
+            )
+            self._indexed = False
 
     @property
     def is_indexed(self) -> bool:

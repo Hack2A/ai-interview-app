@@ -551,6 +551,12 @@ def run_career_cli():
 
         if choice == "0":
             print("Goodbye!")
+            try:
+                if hasattr(career, "llm") and career._llm is not None:
+                    career.llm.unload_model()
+                    print("[System] VRAM cleared for Ollama LLM.")
+            except Exception:
+                pass
             break
         elif choice == "1":
             _feature_match_report(career, resume_text, jd_text)
@@ -586,7 +592,7 @@ def run_career_cli():
 
 def main():
     print("\n" + "=" * 50)
-    print("         🦫  BEAVER AI  🦫")
+    print("           BEAVER AI   ")
     print("=" * 50)
     print("\n  Select mode:")
     print("  [1] AI Interview")

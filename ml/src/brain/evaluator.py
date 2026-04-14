@@ -2,30 +2,25 @@ import json
 import logging
 from pathlib import Path
 
-from llama_cpp import Llama
-
 from config import settings
 
 logger = logging.getLogger("Evaluator")
 
 MAX_EVAL_TOKENS = 800
 EVAL_TEMPERATURE = 0.1
-EVAL_CONTEXT_SIZE = 4096
+
 
 class Evaluator:
-    """Generates post-interview evaluation reports using the LLM."""
+    """Generates post-interview evaluation reports using the LLM (Ollama)."""
 
     def __init__(self, model_path: str | Path) -> None:
         self.model_path = model_path
-        self.llm: Llama | None = None
+        self.llm = None
     
     def _ensure_llm_loaded(self) -> None:
         if self.llm is None:
-            self.llm = Llama(
-                model_path=str(self.model_path),
-                n_ctx=EVAL_CONTEXT_SIZE,
-                verbose=False,
-            )
+            from src.brain.llm_engine import OllamaClient
+            self.llm = OllamaClient()
 
     def generate_report(self, history: list[dict],
                         per_question_scores: list[dict] | None = None) -> dict:
@@ -81,7 +76,8 @@ class Evaluator:
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=MAX_EVAL_TOKENS,
                 temperature=EVAL_TEMPERATURE,
-                response_format={"type": "json_object"}
+                response_format={"type": "json_object"},
+                num_ctx=4096,  # Evaluator needs more context for full transcript
             )
             report = json.loads(output['choices'][0]['message']['content'])
 

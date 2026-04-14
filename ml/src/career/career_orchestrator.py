@@ -5,7 +5,7 @@ Lazy-loads the LLM and delegates to feature-specific modules.
 import json
 import logging
 
-from llama_cpp import Llama
+from src.brain.llm_engine import OllamaClient, OLLAMA_CAREER_MODEL
 
 from config import settings
 
@@ -22,22 +22,16 @@ class CareerOrchestrator:
     """Orchestrates all career management features with a shared LLM."""
 
     def __init__(self) -> None:
-        self._llm: Llama | None = None
+        self._llm: OllamaClient | None = None
 
     @property
-    def llm(self) -> Llama:
+    def llm(self) -> OllamaClient:
         """Lazy-load the LLM model with a larger context for career features."""
         if self._llm is None:
             ctx = CAREER_CONTEXT_SIZE
-            logger.info(f"Loading LLM from: {settings.LLM_MODEL_PATH} (n_ctx={ctx})")
-            self._llm = Llama(
-                model_path=str(settings.LLM_MODEL_PATH),
-                n_ctx=ctx,
-                n_threads=settings.N_THREADS,
-                chat_format="llama-3",
-                verbose=False,
-            )
-            logger.info("LLM loaded for Career features")
+            logger.info(f"Connecting to Ollama (context size constraint ignored in proxy)")
+            self._llm = OllamaClient(model_name=OLLAMA_CAREER_MODEL)
+            logger.info(f"Ollama LLM client {OLLAMA_CAREER_MODEL} loaded for Career features")
         return self._llm
 
     # ── Feature 1: Match Report ───────────────────────────────────

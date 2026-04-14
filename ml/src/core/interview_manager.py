@@ -14,6 +14,7 @@ from src.brain.llm_engine import LLMEngine
 from src.brain.rag_engine import RAGEngine, QuestionBankRAG
 from src.brain.skill_extractor import SkillExtractor
 from src.brain.question_evaluator import QuestionEvaluator
+from src.brain.decision_engine import DecisionEngine
 from src.core.ats_checker import ATSChecker
 from src.core.jd_loader import JDLoader
 from src.core.resume_loader import ResumeLoader
@@ -83,6 +84,7 @@ class InterviewManager:
         self.question_bank = None
         self.skill_extractor = SkillExtractor()
         self.question_evaluator = QuestionEvaluator()
+        self.decision_engine = DecisionEngine()
 
         self.next_turn_audio = None
         self.audio_responses = []
@@ -417,6 +419,14 @@ class InterviewManager:
                 user_text, detected_lang = self.ears.transcribe(str(temp_wav), language=None)
                 self.detected_language = detected_lang
 
+                # Release Whisper's CUDA tensors so Ollama can use that VRAM for gemma4
+                try:
+                    import torch
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
+                except Exception:
+                    pass
+
                 print(f"[User]: {user_text}")
 
                 if not user_text.strip():
@@ -481,67 +491,111 @@ class InterviewManager:
                     self.state.current_question_context = {}
 
                 # 2. Decide next action & fetch RAG question
+                # Map interview type → valid question categories to prevent type bleed
+                _TYPE_CATEGORY_MAP = {
+                    "technical":  ["dsa", "os", "database", "backend", "ml", "general_technical"],
+                    "behavioral": ["behavioral"],
+                    "hr":         ["behavioral"],  # fallback to behavioral for HR
+                    "combined":   None,             # no filter – allow all
+                }
+                import random
                 question_context = None
+                allowed_categories = _TYPE_CATEGORY_MAP.get(self.state.interview_type, None)
+
+                # Get dynamic decision from Intelligent Decision Engine
+                decision = self.decision_engine.evaluate(user_text, self.state.difficulty)
+                self.state.difficulty = decision["new_difficulty"]
+                action = decision["action"]
+
                 if self.question_bank and self.question_bank.is_indexed:
-                    # Topic switch every 3rd question, otherwise context-based follow-up
-                    if self.state.question_count % 3 == 0:
+                    if action == self.decision_engine.ACTION_RAG_NEW_TOPIC:
                         combined_skills = self.state.resume_skills + getattr(self.state, 'jd_skills', [])
-                        import random
                         if combined_skills:
                             query_str = random.choice(combined_skills)
                         else:
-                            query_str = "general engineering"
-                            
-                        results = self.question_bank.retrieve_questions(
-                            query=query_str,
-                            difficulty=self.state.difficulty.lower(),
-                            top_k=5,
-                            exclude_ids=self.state.asked_question_ids
-                        )
+                            query_str = "general software engineering"
+
+                        # Try each allowed category; pick best hit
+                        if allowed_categories:
+                            cat = random.choice(allowed_categories)
+                            results = self.question_bank.retrieve_questions(
+                                query=query_str,
+                                difficulty=self.state.difficulty.lower(),
+                                category=cat,
+                                top_k=5,
+                                exclude_ids=self.state.asked_question_ids,
+                            )
+                            if not results:
+                                results = self.question_bank.retrieve_questions(
+                                    query=query_str,
+                                    difficulty=self.state.difficulty.lower(),
+                                    top_k=5,
+                                    exclude_ids=self.state.asked_question_ids,
+                                )
+                        else:
+                            results = self.question_bank.retrieve_questions(
+                                query=query_str,
+                                difficulty=self.state.difficulty.lower(),
+                                top_k=5,
+                                exclude_ids=self.state.asked_question_ids,
+                            )
                         if results:
                             question_context = random.choice(results)
-                    else:
-                        # Contextual follow-up based on user's preceding answer
-                        results = self.question_bank.retrieve_questions(
-                            query=user_text[:300],
-                            difficulty=self.state.difficulty.lower(),
-                            top_k=3,
-                            exclude_ids=self.state.asked_question_ids
-                        )
-                        if results:
-                            question_context = results[0]
-                    
+                        else:
+                            # RAG returned nothing → LLM generates from resume/JD freely
+                            action = self.decision_engine.ACTION_LLM_DRILL_DOWN
+
                     if question_context:
                         self.state.asked_question_ids.append(question_context["id"])
                         self.state.current_question_context = question_context
 
-                # ── Fast path: speak RAG question directly (no LLM needed) ──
-                if question_context:
-                    import random
-                    ack_phrases = [
-                        "Alright.", "Okay.", "Got it.", "Sure.",
-                        "Thanks for that.", "Understood.", "Good.",
-                        "Interesting.", "Noted.", "Fair enough.",
-                    ]
-                    ack = random.choice(ack_phrases)
-                    q_text = question_context.get("question", "")
-                    self._speak(f"{ack} {q_text}")
+                # ── ALL paths go through the LLM (resume + JD context) ──
+                # The question bank provides a topic HINT only — the LLM
+                # decides the actual question wording based on the candidate's resume and JD.
+                print(f"[Status] Thinking... ({decision['reason']})")
+                itype = self.state.interview_type
+                diff  = self.state.difficulty
+
+                if question_context and action == self.decision_engine.ACTION_RAG_NEW_TOPIC:
+                    # RAG topic hint: tell the LLM WHAT TOPIC to ask about, not WHAT to say
+                    topic = question_context.get("question", "")
+                    category = question_context.get("category", "technical")
+                    llm_instruction = (
+                        f"Move on to a new topic. Ask ONE concise {diff}-level {itype} question "
+                        f"about the following topic, tailored to the candidate's resume and the job description: \"{topic}\". "
+                        f"Do NOT repeat the topic word-for-word. Frame it naturally. "
+                        f"Keep the question under 25 words. Output ONLY the question."
+                    )
                 else:
-                    # ── Slow path: LLM free-form (only when no RAG question) ──
-                    print("[Status] Thinking...")
-                    response_generator = self.brain.generate_stream(
-                        user_text,
-                        self.state.difficulty,
-                        question_context=None
+                    # LLM drill-down or no RAG context: LLM generates freely from resume/JD
+                    _type_hint = {
+                        "technical":  f"Ask ONE concise {diff}-level technical follow-up question based on the candidate's previous answer and resume.",
+                        "behavioral": f"Ask ONE behavioral follow-up question using the STAR method, referencing a specific experience from the candidate's resume.",
+                        "hr":         f"Ask ONE HR follow-up question based on the candidate's career goals and background.",
+                        "combined":   f"Ask ONE {diff}-level follow-up question based on the candidate's previous answer.",
+                    }.get(itype, f"Ask ONE {diff}-level follow-up question based on the candidate's background.")
+                    llm_instruction = (
+                        f"{_type_hint} "
+                        f"Keep it under 25 words. Output ONLY the question, nothing else."
                     )
 
-                    print("[Status] Generating response...")
+                try:
+                    response_generator = self.brain.generate_stream(
+                        user_text,
+                        diff,
+                        question_context={"question": llm_instruction, "category": "llm_driven"}
+                    )
+
+                    print("[Status] Generating next question...")
                     if hasattr(self.voice_engine, 'speak_stream'):
                         self.next_turn_audio = self.voice_engine.speak_stream(response_generator)
                     else:
                         response_text = "".join(list(response_generator))
                         self._speak(response_text)
-
+                except Exception as llm_e:
+                    print(f"[Error] LLM crashed: {llm_e}")
+                    self._generate_opening_question()  # Emergency fallback
+                        
                 self.audio_responses.append(str(temp_wav))
                 self.state.question_count += 1
 
@@ -559,18 +613,45 @@ class InterviewManager:
     def _generate_opening_question(self) -> None:
         """Generate the first interview question based on resume/JD context."""
         
+        # Map interview type → opening question category filter
+        _TYPE_CATEGORY_MAP = {
+            "technical":  ["dsa", "os", "database", "backend", "ml", "general_technical"],
+            "behavioral": ["behavioral"],
+            "hr":         ["behavioral"],
+            "combined":   None,
+        }
+        import random
         question_context = None
+        allowed_categories = _TYPE_CATEGORY_MAP.get(self.state.interview_type, None)
+
         if self.question_bank and self.question_bank.is_indexed:
             combined_skills = self.state.resume_skills + getattr(self.state, 'jd_skills', [])
-            
-            results = self.question_bank.retrieve_by_skills(
-                skills=combined_skills,
-                difficulty=self.state.difficulty.lower(),
-                top_k=10,
-                exclude_ids=self.state.asked_question_ids
-            )
+
+            if allowed_categories:
+                cat = random.choice(allowed_categories)
+                results = self.question_bank.retrieve_by_skills(
+                    skills=combined_skills,
+                    category=cat,
+                    difficulty=self.state.difficulty.lower(),
+                    top_k=10,
+                    exclude_ids=self.state.asked_question_ids,
+                )
+                if not results:  # fallback without category
+                    results = self.question_bank.retrieve_by_skills(
+                        skills=combined_skills,
+                        difficulty=self.state.difficulty.lower(),
+                        top_k=10,
+                        exclude_ids=self.state.asked_question_ids,
+                    )
+            else:
+                results = self.question_bank.retrieve_by_skills(
+                    skills=combined_skills,
+                    difficulty=self.state.difficulty.lower(),
+                    top_k=10,
+                    exclude_ids=self.state.asked_question_ids,
+                )
+
             if results:
-                import random
                 question_context = random.choice(results)
                 self.state.asked_question_ids.append(question_context["id"])
                 self.state.current_question_context = question_context
@@ -593,6 +674,9 @@ class InterviewManager:
             first_q_str += "Could you start by walking me through your background?"
 
         if self.brain:
+            # Gemma4 requires conversations to start with a 'user' message.
+            # Inject a synthetic user opener so the chat template stays valid.
+            self.brain.history.append({"role": "user", "content": "Begin the interview."})
             self.brain.history.append({"role": "assistant", "content": first_q_str})
 
         if hasattr(self.voice_engine, 'speak_stream'):
@@ -625,10 +709,12 @@ class InterviewManager:
                 try:
                     print("[Report] Analyzing sentiment and speech quality...")
                     sentiment_results = []
+                    # Filter out the synthetic opener
+                    user_turns = [msg for msg in history if msg['role'] == 'user' and msg['content'] != "Begin the interview."]
+                    
                     for i, audio_path in enumerate(self.audio_responses):
-                        hist_idx = i - 1
-                        if Path(audio_path).exists() and hist_idx < len(history) and history[hist_idx]['role'] == 'user':
-                            result = self.sentiment_analyzer.analyze_full(audio_path, history[hist_idx]['content'])
+                        if i < len(user_turns) and Path(audio_path).exists():
+                            result = self.sentiment_analyzer.analyze_full(audio_path, user_turns[i]['content'])
                             sentiment_results.append(result)
 
                     if sentiment_results:
@@ -692,3 +778,7 @@ class InterviewManager:
             print(f"\n[Error] Report generation failed: {e}")
             import traceback
             traceback.print_exc()
+
+        if self.brain:
+            self.brain.shutdown()
+            print("[System] VRAM cleared for Ollama LLM.")

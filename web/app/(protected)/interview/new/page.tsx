@@ -49,6 +49,8 @@ export default function NewInterview() {
     const interviewType = useWatch({ control, name: "interviewType" }) ?? "generic";
     const difficulty = useWatch({ control, name: "difficulty" }) ?? "easy";
     const aiProctoring = useWatch({ control, name: "aiProctoring" }) ?? true;
+    const cameraChecked = useWatch({ control, name: "cameraChecked" }) ?? false;
+    const microphoneChecked = useWatch({ control, name: "microphoneChecked" }) ?? false;
     const { setShowNavbar } = useNavbar();
 
     useEffect(() => {
@@ -271,6 +273,7 @@ export default function NewInterview() {
                         isSubmitting={isSubmitting}
                         handleBack={handleBack}
                         handleNext={handleNext}
+                        canSubmit={cameraChecked && microphoneChecked}
                     />
                 </form>
             </div>

@@ -288,6 +288,7 @@ export class InterviewWebSocket {
 			case "ats_result":
 				this.callbacks.onATSResult?.(msg);
 				break;
+			case "start":
 			case "question":
 				this.callbacks.onQuestion?.(msg);
 				break;

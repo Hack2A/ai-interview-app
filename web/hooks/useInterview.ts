@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import {
 	InterviewWebSocket,
-	textToSpeech,
 } from "@/services/interviewService";
 import type {
 	WSSetupMessage,
@@ -41,6 +40,7 @@ export interface UseInterviewReturn {
 	isAITyping: boolean;
 	error: string | null;
 	report: Record<string, unknown> | null;
+	atsResult: Record<string, unknown> | null;
 	sessionId: string | null;
 	sendAnswer: (text: string) => void;
 	sendAudio: (data: Blob | ArrayBuffer) => void;
@@ -91,6 +91,7 @@ export function useInterview(): UseInterviewReturn {
 	const [isAITyping, setIsAITyping] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [report, setReport] = useState<Record<string, unknown> | null>(null);
+	const [atsResult, setAtsResult] = useState<Record<string, unknown> | null>(null);
 	const [sessionId, setSessionId] = useState<string | null>(null);
 
 	const wsRef = useRef<InterviewWebSocket | null>(null);
@@ -104,28 +105,27 @@ export function useInterview(): UseInterviewReturn {
 		phaseRef.current = phase;
 	}, [phase]);
 
-	// ── TTS playback ─────────────────────────────────────────────────────
+	// ── Audio playback ─────────────────────────────────────────────────────
 
-	const playTTS = useCallback(async (text: string) => {
+	const playAudioFromUrl = useCallback(async (audioUrl: string) => {
+		if (!audioUrl) return;
 		try {
-			const audioBlob = await textToSpeech({ text });
-			const url = URL.createObjectURL(audioBlob);
-			const audio = new Audio(url);
+			// Construct full URL using backend Base URL. e.g. "http://localhost:8000/media/audio/..."
+			const backendUrl = process.env.NEXT_PUBLIC_API_URL?.replace("/api", "") || "http://localhost:8000";
+			const fullUrl = `${backendUrl}${audioUrl}`;
+
+			const audio = new Audio(fullUrl);
 
 			if (audioQueueRef.current && !audioQueueRef.current.ended) {
 				audioQueueRef.current.onended = () => {
-					audio.play().catch(() => {});
+					audio.play().catch(() => { });
 				};
 			} else {
-				audio.play().catch(() => {});
+				audio.play().catch(() => { });
 			}
 			audioQueueRef.current = audio;
-
-			audio.onended = () => {
-				URL.revokeObjectURL(url);
-			};
 		} catch (err) {
-			console.warn("TTS playback failed:", err);
+			console.warn("Audio playback failed:", err);
 		}
 	}, []);
 
@@ -185,6 +185,7 @@ export function useInterview(): UseInterviewReturn {
 			onATSResult: (msg) => {
 				if (disposed) return;
 				setStatusMessage("ATS analysis complete. Preparing questions…");
+				setAtsResult(msg.data);
 				console.log("ATS Result:", msg.data);
 			},
 
@@ -203,7 +204,8 @@ export function useInterview(): UseInterviewReturn {
 					timestamp: formatTimestamp(startTimeRef.current),
 				};
 				setTranscript((prev) => [...prev, entry]);
-				playTTS(msg.text);
+
+				if (msg.audio_url) playAudioFromUrl(msg.audio_url);
 			},
 
 			onStreamStart: () => {
@@ -217,7 +219,7 @@ export function useInterview(): UseInterviewReturn {
 				setStreamingText(streamBufferRef.current);
 			},
 
-			onStreamEnd: (fullText) => {
+			onStreamEnd: (fullText, toxicity, audioUrl) => {
 				setIsAITyping(false);
 				setStreamingText("");
 				streamBufferRef.current = "";
@@ -229,7 +231,8 @@ export function useInterview(): UseInterviewReturn {
 					timestamp: formatTimestamp(startTimeRef.current),
 				};
 				setTranscript((prev) => [...prev, entry]);
-				playTTS(fullText);
+
+				if (audioUrl) playAudioFromUrl(audioUrl);
 			},
 
 			onResponse: () => {
@@ -326,6 +329,7 @@ export function useInterview(): UseInterviewReturn {
 		isAITyping,
 		error,
 		report,
+		atsResult,
 		sessionId,
 		sendAnswer,
 		sendAudio,

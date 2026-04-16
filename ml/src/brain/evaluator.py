@@ -15,12 +15,12 @@ EVAL_CONTEXT_SIZE = 4096
 class Evaluator:
     """Generates post-interview evaluation reports using the LLM."""
 
-    def __init__(self, model_path: str | Path) -> None:
+    def __init__(self, model_path: str | Path = None, llm_model: Llama | None = None) -> None:
         self.model_path = model_path
-        self.llm: Llama | None = None
+        self.llm = llm_model
     
     def _ensure_llm_loaded(self) -> None:
-        if self.llm is None:
+        if self.llm is None and self.model_path:
             self.llm = Llama(
                 model_path=str(self.model_path),
                 n_ctx=EVAL_CONTEXT_SIZE,
@@ -77,15 +77,30 @@ class Evaluator:
                 temperature=EVAL_TEMPERATURE,
                 response_format={"type": "json_object"}
             )
-            return json.loads(output['choices'][0]['message']['content'])
+            
+            raw_content = output['choices'][0]['message']['content'].strip()
+            
+            # Clean up potential markdown formatting natively output by LLMs
+            if raw_content.startswith("```"):
+                lines = raw_content.split('\n')
+                if lines[0].startswith("```"): lines = lines[1:]
+                if len(lines) > 0 and lines[-1].startswith("```"): lines = lines[:-1]
+                raw_content = '\n'.join(lines).strip()
+                
+            return json.loads(raw_content)
+            
         except Exception as e:
             logger.error(f"Failed to generate evaluation: {e}", exc_info=True)
             return {
-                "error": "LLM call failed",
+                "error": "LLM returned invalid JSON payload",
                 "details": str(e),
-                "raw": None,
+                "raw": raw_content if 'raw_content' in locals() else None,
                 "score": 0,
-                "mistakes": ["Evaluation system error"],
-                "suggestions": ["Please try again"],
-                "domain_rating": {"hr": 0, "technical": 0, "communication": 0}
+                "mistakes": ["Evaluation system parsing error"],
+                "suggestions": ["Please review transcripts manually"],
+                "domain_rating": {"hr": 0, "technical": 0, "communication": 0},
+                "swot_analysis": {
+                    "strengths": ["N/A"], "weaknesses": ["N/A"],
+                    "opportunities": ["N/A"], "threats": ["N/A"]
+                }
             }

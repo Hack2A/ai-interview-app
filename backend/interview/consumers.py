@@ -1,9 +1,9 @@
 """WebSocket consumer for real-time AI interview sessions.
 
-Full interview pipeline over WebSocket:
-1. Frontend sends "setup" with resume, JD, difficulty, mode, type → ATS + opening question
-2. Frontend sends "answer" with text → AI response (streaming)
-3. Frontend sends binary audio → transcribed via STT → treated as answer
+Full interview pipeline over WebSocket — mirrors the CLI flow exactly:
+1. Frontend sends "setup" with resume, JD, difficulty, mode, type → ATS + opening question + audio
+2. Frontend sends "answer" with text → streaming AI response + audio
+3. Frontend sends binary audio → STT transcription + sentiment → treated as answer
 4. Frontend sends "end" → evaluation report + proctoring summary
 """
 
@@ -15,16 +15,26 @@ import os
 import secrets
 import tempfile
 
+import numpy as np
+
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 from django.contrib.auth.models import AnonymousUser
 from django.utils import timezone
+
+from .utils.audio_handler import (
+    save_audio_blob,
+    save_tts_audio,
+    cleanup_session_audio,
+)
 
 logger = logging.getLogger('interview')
 
 
 class InterviewConsumer(AsyncWebsocketConsumer):
     """Async WebSocket consumer for real-time interview sessions.
+
+    Each connection gets its OWN orchestrator instance — no shared state.
 
     Protocol (JSON messages):
 
@@ -40,11 +50,11 @@ class InterviewConsumer(AsyncWebsocketConsumer):
         {"type": "connected", "session_id": "..."}
         {"type": "status", "message": "..."}
         {"type": "ats_result", "data": {...}}
-        {"type": "question", "text": "..."}
+        {"type": "question", "text": "...", "audio_url": "..."}
         {"type": "stream_start"}
         {"type": "stream_chunk", "text": "..."}
-        {"type": "stream_end", "text": "full response"}
-        {"type": "response", "text": "..."}
+        {"type": "stream_end", "text": "full response", "audio_url": "..."}
+        {"type": "transcript", "text": "...", "sentiment": {...}, "fillers": {...}}
         {"type": "report", "data": {...}}
         {"type": "error", "message": "..."}
     """
@@ -52,13 +62,13 @@ class InterviewConsumer(AsyncWebsocketConsumer):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.session_id = None
-        self.api = None  
+        self.api = None
         self.db_session = None
         self._interview_active = False
         self._difficulty = 'Medium'
         self._proctoring_enabled = False
 
-   
+    # ── Connection Lifecycle ──────────────────────────────────────
 
     async def connect(self):
         """Accept WebSocket connection and generate session ID."""
@@ -66,7 +76,7 @@ class InterviewConsumer(AsyncWebsocketConsumer):
         await self.accept()
 
         await self.send_json({
-            'type': 'connected', 
+            'type': 'connected',
             'session_id': self.session_id,
             'message': 'WebSocket connected. Send {"type": "setup", ...} to begin.',
         })
@@ -80,16 +90,16 @@ class InterviewConsumer(AsyncWebsocketConsumer):
                      f"code={close_code}")
         await self._cleanup_session()
 
-    
+    # ── Message Router ────────────────────────────────────────────
 
     async def receive(self, text_data=None, bytes_data=None):
         """Route incoming messages to appropriate handlers."""
-         
+        # Binary data = raw audio from browser MediaRecorder
         if bytes_data:
             await self._handle_audio(bytes_data)
             return
 
-        
+        # JSON text messages
         if text_data:
             try:
                 data = json.loads(text_data)
@@ -104,7 +114,7 @@ class InterviewConsumer(AsyncWebsocketConsumer):
 
             handlers = {
                 'setup': self._handle_setup,
-                'start': self._handle_setup,  
+                'start': self._handle_setup,
                 'answer': self._handle_answer,
                 'end': self._handle_end,
             }
@@ -119,6 +129,7 @@ class InterviewConsumer(AsyncWebsocketConsumer):
                                f'Use "setup", "answer", or "end".',
                 })
 
+    # ── PDF Extraction ────────────────────────────────────────────
 
     @staticmethod
     def _extract_pdf_text(pdf_bytes: bytes) -> str:
@@ -135,19 +146,20 @@ class InterviewConsumer(AsyncWebsocketConsumer):
             logger.error(f'PDF extraction failed: {e}')
             return ''
 
+    # ── Setup: Full Interview Pipeline Init ───────────────────────
 
     async def _handle_setup(self, data: dict):
         """Initialize the full interview pipeline.
 
-        Accepts resume/JD as either:
-          - Plain text: {"resume": "text...", "jd": "text..."}
-          - Base64 PDF: {"resume_pdf": "base64...", "jd_pdf": "base64..."}
-
-        Other fields:
-            difficulty: str (Easy/Medium/Hard/Extreme)
-            mode: str (generic/curated)
-            interview_type: str (technical/behavioral/hr/combined)
-            proctoring: bool
+        Mirrors CLI flow:
+        1. Load resume + JD
+        2. Initialize orchestrator engines
+        3. Run ATS analysis
+        4. Create session (difficulty, mode, type)
+        5. Start proctoring (if enabled)
+        6. Generate opening question
+        7. Synthesize opening question audio (TTS)
+        8. Send question with text + audio_url
         """
         if self._interview_active:
             await self.send_json({
@@ -156,13 +168,13 @@ class InterviewConsumer(AsyncWebsocketConsumer):
             })
             return
 
-        
+        # Extract config
         self._difficulty = data.get('difficulty', 'Medium')
         interview_mode = data.get('mode', 'generic')
         interview_type = data.get('interview_type', 'technical')
         self._proctoring_enabled = data.get('proctoring', False)
 
-        
+        # ── Parse resume (text or PDF) ──
         resume_text = data.get('resume', '')
         resume_pdf_b64 = data.get('resume_pdf', '')
         if resume_pdf_b64 and not resume_text:
@@ -184,7 +196,7 @@ class InterviewConsumer(AsyncWebsocketConsumer):
                 })
                 return
 
-        
+        # ── Parse JD (text or PDF) ──
         jd_text = data.get('jd', '')
         jd_pdf_b64 = data.get('jd_pdf', '')
         if jd_pdf_b64 and not jd_text:
@@ -207,7 +219,7 @@ class InterviewConsumer(AsyncWebsocketConsumer):
                 return
 
         try:
-            
+            # ── Step 1: Create orchestrator (per-connection) ──
             await self.send_json({
                 'type': 'status',
                 'message': 'Initializing AI interview engine...',
@@ -235,7 +247,7 @@ class InterviewConsumer(AsyncWebsocketConsumer):
                         self.api.load_jd_from_text, jd_text
                     )
                 except AttributeError:
-                    # RAGEngine may not have index_jd — set JD directly
+                    # RAG index_jd may not be available
                     self.api._jd_text = jd_text
                     logger.warning("RAG indexing skipped (index_jd not available)")
 
@@ -284,18 +296,25 @@ class InterviewConsumer(AsyncWebsocketConsumer):
             # ── Step 7: Generate opening question ──
             await self.send_json({
                 'type': 'status',
-                'message': 'Interview starting...',
+                'message': 'Generating opening question...',
             })
 
             opening = await asyncio.to_thread(
                 self.api.get_opening_question, self._difficulty
             )
 
+            # Strip system-prompt leakage from local LLM response
+            opening = self._clean_llm_response(opening)
+
             await self._save_message('ai', opening)
+
+            # ── Step 8: Synthesize opening question audio (TTS) ──
+            audio_url = await self._synthesize_and_save(opening)
 
             await self.send_json({
                 'type': 'question',
                 'text': opening,
+                'audio_url': audio_url,
             })
 
             logger.info(
@@ -314,7 +333,15 @@ class InterviewConsumer(AsyncWebsocketConsumer):
     # ── Answer: Chat with AI ──────────────────────────────────────
 
     async def _handle_answer(self, data: dict):
-        """Process a user answer and get AI response."""
+        """Process a user answer and get AI response with audio.
+
+        Flow (mirrors CLI):
+        1. Check toxicity
+        2. Save user message
+        3. Stream AI response token-by-token
+        4. Synthesize full response to audio (TTS)
+        5. Send stream_end with text + audio_url
+        """
         if not self._interview_active or not self.api:
             await self.send_json({
                 'type': 'error',
@@ -328,6 +355,13 @@ class InterviewConsumer(AsyncWebsocketConsumer):
                 'type': 'error',
                 'message': 'Empty answer.',
             })
+            return
+
+        # Check if user voluntarily wants to end
+        end_phrases = ["end interview", "end the interview", "stop interview", "conclude interview"]
+        if any(p in user_text.lower() for p in end_phrases) and len(user_text) < 50:
+            logger.info(f"User manually ended interview for session {self.session_id}")
+            asyncio.create_task(self._handle_end({}))
             return
 
         # Check toxicity
@@ -349,18 +383,30 @@ class InterviewConsumer(AsyncWebsocketConsumer):
             # Save AI message
             await self._save_message('ai', full_response)
 
-            # Send complete response
+            # Synthesize response audio (TTS)
+            audio_url = await self._synthesize_and_save(full_response)
+
+            # Send complete response with audio
             await self.send_json({
                 'type': 'stream_end',
                 'text': full_response,
+                'audio_url': audio_url,
                 'toxicity': toxicity,
             })
 
-            # Also send as a simple "response" for easy consumption
-            await self.send_json({
-                'type': 'response',
-                'text': full_response,
-            })
+            # Auto-detect if interview has concluded
+            is_ending = any(phrase in full_response.lower() for phrase in [
+                "concludes the interview",
+                "concludes the technical interview",
+                "concludes our interview",
+                "end of the interview",
+                "end of our interview",
+                "that concludes"
+            ])
+            
+            if is_ending:
+                logger.info(f"Auto-detected end of interview for session {self.session_id}")
+                asyncio.create_task(self._handle_end({}))
 
         except Exception as e:
             logger.exception(f"Chat error: {e}")
@@ -369,10 +415,18 @@ class InterviewConsumer(AsyncWebsocketConsumer):
                 'message': f'AI response failed: {str(e)}',
             })
 
-    # ── Audio: STT → Answer ───────────────────────────────────────
+    # ── Audio: STT + Sentiment → Answer ──────────────────────────
 
     async def _handle_audio(self, audio_data: bytes):
-        """Transcribe binary audio and treat as answer."""
+        """Transcribe binary audio, analyze sentiment, and treat as answer.
+
+        Flow (mirrors CLI):
+        1. Save audio file to media/audio/<session>/
+        2. Transcribe via STT engine
+        3. Analyze sentiment + detect fillers
+        4. Send transcript with analysis
+        5. Route to _handle_answer for AI response
+        """
         if not self._interview_active or not self.api:
             await self.send_json({
                 'type': 'error',
@@ -386,20 +440,15 @@ class InterviewConsumer(AsyncWebsocketConsumer):
         })
 
         try:
-            with tempfile.NamedTemporaryFile(
-                delete=False, suffix='.webm'
-            ) as tmp:
-                tmp.write(audio_data)
-                audio_path = tmp.name
+            # Save audio to session directory (not temp)
+            audio_path = await asyncio.to_thread(
+                save_audio_blob, audio_data, self.session_id
+            )
 
+            # STT transcription
             result = await asyncio.to_thread(
                 self.api.transcribe_audio, audio_path
             )
-
-            try:
-                os.unlink(audio_path)
-            except OSError:
-                pass
 
             transcribed_text = result.get('text', '').strip()
             if not transcribed_text:
@@ -409,11 +458,37 @@ class InterviewConsumer(AsyncWebsocketConsumer):
                 })
                 return
 
-            await self.send_json({
-                'type': 'transcription',
-                'text': transcribed_text,
-            })
+            # Sentiment analysis on the audio file
+            sentiment = None
+            try:
+                sentiment = await asyncio.to_thread(
+                    self.api.analyze_sentiment, audio_path
+                )
+            except Exception as e:
+                logger.warning(f"Sentiment analysis failed: {e}")
 
+            # Filler word detection on transcribed text
+            fillers = None
+            try:
+                fillers = await asyncio.to_thread(
+                    self.api.detect_fillers, transcribed_text
+                )
+            except Exception as e:
+                logger.warning(f"Filler detection failed: {e}")
+
+            # Send transcript with analysis results
+            transcript_msg = {
+                'type': 'transcript',
+                'text': transcribed_text,
+            }
+            if sentiment:
+                transcript_msg['sentiment'] = sentiment
+            if fillers:
+                transcript_msg['fillers'] = fillers
+
+            await self.send_json(transcript_msg)
+
+            # Route transcribed text as an answer
             await self._handle_answer({
                 'type': 'answer',
                 'text': transcribed_text,
@@ -426,10 +501,17 @@ class InterviewConsumer(AsyncWebsocketConsumer):
                 'message': f'Transcription failed: {str(e)}',
             })
 
-    # ── End: Report + Cleanup ─────────────────────────────────────
+    # ── End: Report + Proctoring + Cleanup ────────────────────────
 
     async def _handle_end(self, data: dict):
-        """End interview, generate report, stop proctoring."""
+        """End interview, generate evaluation report, stop proctoring.
+
+        Flow (mirrors CLI):
+        1. Generate evaluation report from chat history
+        2. Stop proctoring and get violation summary
+        3. Send report
+        4. Clean up
+        """
         if not self._interview_active or not self.api:
             await self.send_json({
                 'type': 'error',
@@ -455,7 +537,10 @@ class InterviewConsumer(AsyncWebsocketConsumer):
                 )
             except asyncio.TimeoutError:
                 logger.error("Report generation timed out after 120s")
-                report = {"error": "Report generation timed out", "chat_history": history}
+                report = {
+                    "error": "Report generation timed out",
+                    "chat_history": history,
+                }
 
         except Exception as e:
             logger.exception(f"Report error: {e}")
@@ -490,35 +575,95 @@ class InterviewConsumer(AsyncWebsocketConsumer):
         # Cleanup AFTER sending the report
         await self._cleanup_session()
 
-    # ── Streaming Helper ──────────────────────────────────────────
+    # ── Streaming Helper (truly incremental) ──────────────────────
 
     async def _stream_response(self, user_text: str,
                                 difficulty: str) -> str:
-        """Stream LLM response token-by-token over WebSocket."""
+        """Stream LLM response token-by-token over WebSocket.
+
+        Uses an asyncio.Queue fed by a background thread so each
+        chunk is sent to the client as soon as it's generated —
+        no collecting-then-sending.
+        """
+        queue = asyncio.Queue()
         chunks = []
+        loop = asyncio.get_running_loop()
 
         def _generate():
-            return list(self.api.chat_stream(user_text, difficulty))
+            """Run the synchronous generator in a thread, pushing to queue."""
+            try:
+                for chunk in self.api.chat_stream(user_text, difficulty):
+                    if chunk.strip():
+                        loop.call_soon_threadsafe(
+                            queue.put_nowait, chunk
+                        )
+                # Signal completion
+                loop.call_soon_threadsafe(
+                    queue.put_nowait, None
+                )
+            except Exception as e:
+                loop.call_soon_threadsafe(
+                    queue.put_nowait, e
+                )
 
-        all_chunks = await asyncio.to_thread(_generate)
+        # Start generation in background thread
+        gen_future = loop.run_in_executor(None, _generate)
 
-        for chunk in all_chunks:
-            if chunk.strip():
-                chunks.append(chunk)
-                await self.send_json({
-                    'type': 'stream_chunk',
-                    'text': chunk,
-                })
+        # Read chunks as they arrive and send immediately
+        while True:
+            item = await queue.get()
+
+            if item is None:
+                # Generation complete
+                break
+            if isinstance(item, Exception):
+                raise item
+
+            chunks.append(item)
+            await self.send_json({
+                'type': 'stream_chunk',
+                'text': item,
+            })
+
+        # Wait for thread to fully finish
+        await gen_future
 
         return ' '.join(chunks).strip()
 
-    # ── Orchestrator Factory ──────────────────────────────────────
+    # ── TTS Helper ────────────────────────────────────────────────
+
+    async def _synthesize_and_save(self, text: str) -> str | None:
+        """Synthesize text to audio and save to session media directory.
+
+        Returns:
+            URL path to the audio file, or None if TTS fails.
+        """
+        try:
+            source_path = await asyncio.to_thread(
+                self.api.synthesize_audio, text
+            )
+            if source_path:
+                audio_url = await asyncio.to_thread(
+                    save_tts_audio, source_path, self.session_id
+                )
+                return audio_url
+        except Exception as e:
+            logger.warning(f"TTS synthesis failed: {e}")
+        return None
+
+    # ── Orchestrator Factory (per-connection) ─────────────────────
 
     @staticmethod
     def _create_orchestrator():
-        """Create orchestrator instance."""
-        from .apps import get_orchestrator
-        return get_orchestrator()
+        """Create a FRESH orchestrator instance per WebSocket connection.
+
+        Each connection gets its own orchestrator — no shared state
+        between concurrent interview sessions.
+        """
+        from .apps import _ensure_ml_path
+        _ensure_ml_path()
+        from orchestrator import BeaverAIOrchestrator
+        return BeaverAIOrchestrator(lazy_load=True)
 
     # ── Database Helpers ──────────────────────────────────────────
 
@@ -569,5 +714,65 @@ class InterviewConsumer(AsyncWebsocketConsumer):
 
     # ── Utility ───────────────────────────────────────────────────
 
+    @staticmethod
+    def _clean_llm_response(text: str) -> str:
+        """Strip system-prompt / resume leakage from local LLM output.
+
+        Some local GGUF models echo the persona rules and resume text
+        before generating the actual answer.  This is a safety net
+        after the LLM engine's own _strip_echo processing.
+        """
+        import re
+
+        if not text:
+            return text
+
+        # Markers that indicate raw system-prompt or resume content
+        echo_markers = [
+            'You are BeaverAI', 'STRICT RULES:', 'QUESTION FOCUS:',
+            "CANDIDATE'S RESUME", 'ABSOLUTE RULE:', 'QUESTION RULES:',
+            'TECHNICAL SKILLS', 'EDUCATION', 'EXPERIENCE', 'SUMMARY',
+            'DevOps & T ools', 'F rontend:', 'Backend:', 'Languages:',
+            'Databases:', 'GPA:', 'Bachelor',
+        ]
+
+        sentences = re.split(r'(?<=[.!?])\s+', text.strip())
+        
+        # Check if the raw text has ANY overlap with the markers
+        has_leakage = any(marker in text for marker in echo_markers)
+        
+        # If it doesn't look like a question at all, treat it as failure
+        if not has_leakage and '?' in text:
+            return text
+
+        # Try to extract a proper question that doesn't have resume markers
+        questions = [
+            s for s in sentences
+            if '?' in s and not any(m in s for m in echo_markers)
+        ]
+
+        if questions:
+            return questions[-1].strip()
+
+        # Total fallback — the LLM completely failed to ask a question
+        return (
+            "Hello, let's begin the interview. "
+            "Can you tell me about a recent project you worked on "
+            "and what technologies you used?"
+        )
+
     async def send_json(self, content: dict):
-        await self.send(text_data=json.dumps(content))
+        await self.send(text_data=json.dumps(content, cls=_NumpyEncoder))
+
+
+class _NumpyEncoder(json.JSONEncoder):
+    """JSON encoder that handles NumPy types from ML pipelines."""
+
+    def default(self, obj):
+        if isinstance(obj, np.integer):
+            return int(obj)
+        if isinstance(obj, np.floating):
+            return float(obj)
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        return super().default(obj)

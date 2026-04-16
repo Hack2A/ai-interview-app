@@ -56,6 +56,13 @@
     </button>
   </div>
 
+  <!-- Audio Player (hidden until needed) -->
+  <div id="audio-panel"
+    style="display:none; background:#e0f2fe; padding:10px 16px; border-radius:8px; margin-bottom:12px;">
+    <strong>🔊 AI Audio:</strong>
+    <audio id="ai-audio" controls style="vertical-align:middle; margin-left:8px; height:32px;"></audio>
+  </div>
+
   <!-- Log -->
   <div id="log"
     style="white-space:pre-wrap; font-family:monospace; background:#111; color:#0f0; padding:16px; height:350px; overflow-y:auto; border-radius:8px;">
@@ -63,12 +70,21 @@
   <br>
 
   <!-- Answer Input -->
-  <div style="display:flex; gap:8px;">
+  <div style="display:flex; gap:8px; align-items:center;">
     <input id="msg" placeholder="Type your answer..."
       style="flex:1; padding:8px; border-radius:4px; border:1px solid #ccc;" disabled>
     <button onclick="sendAnswer()" id="send-btn" disabled style="padding:8px 16px;">Send</button>
+    <button onclick="toggleMic()" id="mic-btn" disabled
+      style="padding:8px 16px; background:#059669; color:white; border:none; border-radius:4px; cursor:pointer;">
+      🎤 Mic
+    </button>
     <button onclick="endInterview()" id="end-btn" disabled
       style="padding:8px 16px; background:#dc2626; color:white; border:none; border-radius:4px;">End</button>
+  </div>
+
+  <!-- Mic Status -->
+  <div id="mic-status" style="display:none; color:#dc2626; font-weight:600; margin-top:8px;">
+    🔴 Recording... (click Mic again to stop)
   </div>
 
   <script>
@@ -77,7 +93,14 @@
     const sendBtn = document.getElementById('send-btn');
     const endBtn = document.getElementById('end-btn');
     const startBtn = document.getElementById('start-btn');
+    const micBtn = document.getElementById('mic-btn');
+    const micStatus = document.getElementById('mic-status');
+    const audioPanel = document.getElementById('audio-panel');
+    const aiAudio = document.getElementById('ai-audio');
     let ws = null;
+    let mediaRecorder = null;
+    let audioChunks = [];
+    let isRecording = false;
 
     function addLog(txt, color) {
       const span = document.createElement('span');
@@ -87,11 +110,17 @@
       log.scrollTop = log.scrollHeight;
     }
 
+    function playAudio(url) {
+      if (!url) return;
+      audioPanel.style.display = 'block';
+      aiAudio.src = url;
+      aiAudio.play().catch(e => console.warn('Autoplay blocked:', e));
+    }
+
     function fileToBase64(file) {
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => {
-          // Strip "data:...;base64," prefix
           const b64 = reader.result.split(',')[1];
           resolve(b64);
         };
@@ -104,7 +133,6 @@
       startBtn.disabled = true;
       startBtn.textContent = '⏳ Connecting...';
 
-      // Build setup payload
       const setup = {
         type: 'setup',
         difficulty: document.getElementById('difficulty').value,
@@ -113,7 +141,6 @@
         proctoring: document.getElementById('proctoring').checked,
       };
 
-      // Read PDF files if provided
       const resumeFile = document.getElementById('resume_file').files[0];
       const jdFile = document.getElementById('jd_file').files[0];
 
@@ -131,7 +158,6 @@
         setup.jd = document.getElementById('jd').value;
       }
 
-      // Connect WebSocket
       ws = new WebSocket('ws://' + location.host + '/ws/interview/');
 
       ws.onopen = () => {
@@ -156,9 +182,14 @@
             break;
           case 'question':
             addLog('\n🤖 AI: ' + msg.text, '#0f0');
+            if (msg.audio_url) {
+              addLog('🔊 Audio: ' + msg.audio_url, '#888');
+              playAudio(msg.audio_url);
+            }
             msgInput.disabled = false;
             sendBtn.disabled = false;
             endBtn.disabled = false;
+            micBtn.disabled = false;
             msgInput.focus();
             break;
           case 'stream_start':
@@ -171,20 +202,38 @@
             break;
           case 'stream_end':
             addLog('', '#0f0');
+            if (msg.audio_url) {
+              addLog('🔊 Audio: ' + msg.audio_url, '#888');
+              playAudio(msg.audio_url);
+            }
+            if (msg.toxicity && msg.toxicity.is_toxic) {
+              addLog('⚠️ Toxicity detected: ' + msg.toxicity.matched_words.join(', '), '#f80');
+            }
             msgInput.disabled = false;
             msgInput.focus();
             break;
-          case 'response':
-            break;
-          case 'transcription':
+          case 'transcript':
             addLog('🎤 Transcribed: ' + msg.text, '#f0f');
+            if (msg.sentiment) {
+              addLog('   😊 Sentiment: ' + (msg.sentiment.emotion || 'N/A') +
+                ' (confidence: ' + (msg.sentiment.confidence || 'N/A') + ')', '#f0f');
+            }
+            if (msg.fillers && msg.fillers.count > 0) {
+              addLog('   💬 Fillers (' + msg.fillers.count + '): ' +
+                msg.fillers.fillers.join(', '), '#f0f');
+            }
             break;
           case 'report':
             addLog('\n📋 EVALUATION REPORT:', '#ff0');
             addLog(JSON.stringify(msg.data, null, 2), '#ff0');
+            if (msg.proctoring) {
+              addLog('\n🔍 PROCTORING REPORT:', '#f80');
+              addLog(JSON.stringify(msg.proctoring, null, 2), '#f80');
+            }
             msgInput.disabled = true;
             sendBtn.disabled = true;
             endBtn.disabled = true;
+            micBtn.disabled = true;
             break;
           case 'error':
             addLog('❌ ' + msg.message, '#f00');
@@ -194,7 +243,11 @@
         }
       };
 
-      ws.onerror = () => { addLog('❌ WebSocket error', '#f00'); startBtn.disabled = false; startBtn.textContent = '🚀 Start Interview'; };
+      ws.onerror = () => {
+        addLog('❌ WebSocket error', '#f00');
+        startBtn.disabled = false;
+        startBtn.textContent = '🚀 Start Interview';
+      };
       ws.onclose = () => addLog('🔌 Disconnected', '#888');
     }
 
@@ -211,6 +264,45 @@
       if (!ws) return;
       ws.send(JSON.stringify({ type: 'end' }));
       addLog('\n→ Ending interview...', '#ff0');
+    }
+
+    // ── Microphone Recording ──────────────────────────────────────
+
+    async function toggleMic() {
+      if (isRecording) {
+        // Stop recording
+        mediaRecorder.stop();
+        isRecording = false;
+        micBtn.textContent = '🎤 Mic';
+        micBtn.style.background = '#059669';
+        micStatus.style.display = 'none';
+      } else {
+        // Start recording
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+          audioChunks = [];
+
+          mediaRecorder.ondataavailable = (e) => {
+            if (e.data.size > 0) audioChunks.push(e.data);
+          };
+
+          mediaRecorder.onstop = () => {
+            const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+            addLog('\n🎤 Sending audio (' + Math.round(audioBlob.size / 1024) + ' KB)...', '#f0f');
+            ws.send(audioBlob);
+            stream.getTracks().forEach(t => t.stop());
+          };
+
+          mediaRecorder.start();
+          isRecording = true;
+          micBtn.textContent = '⏹ Stop';
+          micBtn.style.background = '#dc2626';
+          micStatus.style.display = 'block';
+        } catch (err) {
+          addLog('❌ Microphone access denied: ' + err.message, '#f00');
+        }
+      }
     }
 
     msgInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendAnswer(); });

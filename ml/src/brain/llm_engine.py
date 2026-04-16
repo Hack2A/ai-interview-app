@@ -1,5 +1,4 @@
 import logging
-import sys
 import time
 from typing import Generator
 
@@ -28,6 +27,7 @@ class LLMEngine:
                 model_path=str(settings.LLM_MODEL_PATH),
                 n_ctx=settings.CONTEXT_SIZE,
                 n_threads=settings.N_THREADS,
+                n_gpu_layers=settings.N_GPU_LAYERS,
                 verbose=False,
                 chat_format="llama-3"
             )
@@ -44,7 +44,6 @@ class LLMEngine:
         )
         self.history = []
         self._is_first_call = True
-
 
     def generate_stream(self, user_input: str, difficulty: str = "Medium") -> Generator[str, None, None]:
         """Stream LLM response token-by-token, yielding sentence fragments."""
@@ -67,7 +66,6 @@ class LLMEngine:
             yield "I apologize, I'm having technical difficulties. Could you please repeat that?"
             return
 
-        buffer = ""
         full_response = ""
         token_count = 0
         
@@ -85,26 +83,67 @@ class LLMEngine:
 
                 if "content" in chunk["choices"][0]["delta"]:
                     token = chunk["choices"][0]["delta"]["content"]
-                    buffer += token
                     full_response += token
                     token_count += 1
-                    
-                    if any(x in token for x in [".", "?", "!", "\n"]):
-                        yield buffer
-                        buffer = ""
         except Exception as e:
             logger.error(f"Stream error: {e}", exc_info=True)
-            if buffer:
-                yield buffer
-                buffer = ""
         
         logger.info(f"Generated {token_count} tokens, {len(full_response)} characters")
-        
-        if buffer:
-            yield buffer
 
-        
-        self.history.append({"role": "assistant", "content": full_response})
+        # Post-process: strip system-prompt echo
+        clean = self._strip_echo(full_response)
+        if clean != full_response:
+            logger.warning("Detected system-prompt echo in LLM output — stripped")
+
+        self.history.append({"role": "assistant", "content": clean})
+
+        if clean.strip():
+            yield clean.strip()
+
+    def _strip_echo(self, response: str) -> str:
+        """Detect and remove echoed system prompt / resume text from LLM output."""
+        import re
+
+        if not response:
+            return response
+
+        echo_markers = [
+            "STRICT RULES:", "QUESTION FOCUS:", "CANDIDATE'S RESUME",
+            "ABSOLUTE RULE:", "QUESTION RULES:", "TECHNICAL SKILLS",
+            "EXPERIENCE\n", "EDUCATION\n", "You are BeaverAI",
+        ]
+
+        has_echo = any(marker in response for marker in echo_markers)
+        if not has_echo:
+             # Look for standard headers
+             if bool(re.search(r'\b(EDUCATION|EXPERIENCE|SUMMARY|TECHNICAL SKILLS)\b', response)):
+                 has_echo = True
+
+        if not has_echo:
+            return response
+
+        sentences = re.split(r'(?<=[.!?])\s+', response.strip())
+
+        # Collect sentences that look like real interviewer output
+        clean_sentences = []
+        for s in sentences:
+            is_echo = any(marker in s for marker in echo_markers)
+            is_resume = bool(re.match(
+                r'^(Languages?|Frontend|Backend|Databases?|DevOps|'
+                r'TECHNICAL SKILLS|EXPERIENCE|EDUCATION|SUMMARY|'
+                r'GPA|Bachelor|•)',
+                s.strip()
+            ))
+            if not is_echo and not is_resume:
+                clean_sentences.append(s)
+
+        if clean_sentences:
+            questions = [s for s in clean_sentences if '?' in s]
+            if questions:
+                return questions[-1].strip()
+            return clean_sentences[-1].strip()
+
+        return response
 
     @property
     def llm(self) -> Llama:

@@ -42,7 +42,18 @@ ROOT_URLCONF = 'core.urls'
 WSGI_APPLICATION = 'core.wsgi.application'
 ASGI_APPLICATION = 'core.asgi.application'
 
-# Django Channels
+# Django Channels — use Redis for production / multi-process
+# Install: pip install channels-redis
+# If Redis is not available, uncomment the InMemory fallback below.
+# CHANNEL_LAYERS = {
+#     'default': {
+#         'BACKEND': 'channels_redis.core.RedisChannelLayer',
+#         'CONFIG': {
+#             'hosts': [os.getenv('REDIS_URL', 'redis://127.0.0.1:6379/0')],
+#         },
+#     },
+# }
+# Fallback for development without Redis:
 CHANNEL_LAYERS = {
     'default': {
         'BACKEND': 'channels.layers.InMemoryChannelLayer',

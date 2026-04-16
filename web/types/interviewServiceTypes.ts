@@ -122,6 +122,7 @@ export type WSServerMessage =
 	| WSConnectedMessage
 	| WSStatusMessage
 	| WSATSResultMessage
+	| WSStartMessage
 	| WSQuestionMessage
 	| WSStreamStartMessage
 	| WSStreamChunkMessage
@@ -147,9 +148,16 @@ export interface WSATSResultMessage {
 	data: Record<string, unknown>;
 }
 
+export interface WSStartMessage {
+	type: "start";
+	text: string;
+	audio_url?: string;
+}
+
 export interface WSQuestionMessage {
 	type: "question";
 	text: string;
+	audio_url?: string;
 }
 
 export interface WSStreamStartMessage {
@@ -165,6 +173,7 @@ export interface WSStreamEndMessage {
 	type: "stream_end";
 	text: string;
 	toxicity?: unknown;
+	audio_url?: string;
 }
 
 export interface WSResponseMessage {
@@ -195,10 +204,10 @@ export interface InterviewWSCallbacks {
 	onConnected?: (msg: WSConnectedMessage) => void;
 	onStatus?: (msg: WSStatusMessage) => void;
 	onATSResult?: (msg: WSATSResultMessage) => void;
-	onQuestion?: (msg: WSQuestionMessage) => void;
+	onQuestion?: (msg: WSStartMessage | WSQuestionMessage) => void;
 	onStreamStart?: () => void;
 	onStreamChunk?: (chunk: string) => void;
-	onStreamEnd?: (fullText: string, toxicity?: unknown) => void;
+	onStreamEnd?: (fullText: string, toxicity?: unknown, audioUrl?: string) => void;
 	onResponse?: (text: string) => void;
 	onTranscription?: (text: string) => void;
 	onReport?: (msg: WSReportMessage) => void;

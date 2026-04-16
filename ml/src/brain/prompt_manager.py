@@ -71,13 +71,15 @@ class PromptManager:
         type_guidance = self._TYPE_QUESTION_GUIDANCE.get(interview_type, self._TYPE_QUESTION_GUIDANCE["technical"])
 
         self.system_persona = type_persona + self._COMMON_RULES + f"\nQUESTION FOCUS:\n{type_guidance}\n"
+        self.resume_context = ""
+        self.jd_context = ""
 
         if resume_text:
             sanitized_resume = self._sanitize_text(resume_text, max_length=3000)
-            self.system_persona += (
-                "\n\n ABSOLUTE RULE: You must NEVER repeat, read, narrate, list, or summarize "
-                "any part of the resume below. ONLY use it to formulate questions. \n\n"
-                f"CANDIDATE'S RESUME (for reference only — DO NOT READ ALOUD):\n{sanitized_resume}\n\n"
+            self.resume_context = (
+                f"CANDIDATE'S RESUME:\n{sanitized_resume}\n\n"
+                "ABSOLUTE RULE: You must NEVER repeat, read, narrate, list, or summarize "
+                "any part of the resume above. ONLY use it to formulate questions.\n"
                 "QUESTION RULES:\n"
                 "- Pick ONE project or skill and ask a DIRECT question about it.\n"
                 "- Example: 'Tell me about the data pipeline you built for ReviewNexus.'\n"
@@ -90,8 +92,8 @@ class PromptManager:
             if jd_context:
                 self.has_jd = True
                 sanitized_jd = self._sanitize_text(jd_context, max_length=3000)
-                self.system_persona += (
-                    f"\nJOB DESCRIPTION REQUIREMENTS:\n{sanitized_jd}\n\n"
+                self.jd_context = (
+                    f"JOB DESCRIPTION REQUIREMENTS:\n{sanitized_jd}\n\n"
                     "IMPORTANT: Tailor your questions to verify the candidate has the skills "
                     "listed in this job description. Cross-reference their resume with job requirements.\n"
                     "Ask about gaps between the resume and job description.\n"
@@ -210,13 +212,24 @@ class PromptManager:
         
         if history:
             sanitized_history = []
-            for msg in history[-20:]:
+            for i, msg in enumerate(history[-20:]):
+                role = msg.get("role", "user")
+                content = self._sanitize_text(msg.get("content", ""), max_length=5000)
+                
+                # Attach context only to the very first user message to prevent system-prompt echo
+                if i == 0 and role == "user":
+                    context = []
+                    if self.resume_context: context.append(self.resume_context)
+                    if self.jd_context: context.append(self.jd_context)
+                    
+                    if context:
+                        content = "Context for the interview:\n" + "\n".join(context) + "\n\n" + content
+                
                 sanitized_msg = {
-                    "role": msg.get("role", "user"),
-                    "content": self._sanitize_text(msg.get("content", ""), max_length=5000)
+                    "role": role,
+                    "content": content
                 }
                 sanitized_history.append(sanitized_msg)
             messages.extend(sanitized_history)
             
-        
         return messages

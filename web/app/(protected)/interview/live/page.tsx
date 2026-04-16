@@ -29,6 +29,7 @@ export default function LiveInterview() {
 		isAITyping,
 		error,
 		report,
+		atsResult,
 		sendAudio,
 		endInterview,
 	} = useInterview();
@@ -112,15 +113,14 @@ export default function LiveInterview() {
 						].map((step, i) => (
 							<div
 								key={i}
-								className={`flex items-center gap-3 rounded-lg px-4 py-2.5 text-sm transition-all ${
-									step.done
+								className={`flex items-center gap-3 rounded-lg px-4 py-2.5 text-sm transition-all ${step.done
 										? "bg-emerald-50 text-emerald-700"
 										: i === 0 && phase === "loading"
 											? "bg-blue-50 text-blue-700"
 											: phase === "setting-up" && i === 1
 												? "bg-blue-50 text-blue-700"
 												: "bg-slate-100 text-slate-400"
-								}`}
+									}`}
 							>
 								{step.done ? (
 									<CheckCircle2 className="w-4 h-4 text-emerald-500" />
@@ -131,6 +131,40 @@ export default function LiveInterview() {
 							</div>
 						))}
 					</div>
+
+					{/* ATS Result Summary */}
+					{atsResult && (
+						<div className="mt-4 w-full text-left rounded-xl border border-indigo-100 bg-indigo-50 p-4 shadow-sm animate-in fade-in slide-in-from-bottom-4">
+							<h3 className="font-semibold text-indigo-900 mb-3 flex items-center gap-2">
+								<CheckCircle2 className="w-5 h-5" />
+								Internal Resume Analysis
+							</h3>
+
+							<div className="grid grid-cols-2 gap-3 mb-4">
+								<div className="bg-white rounded-lg p-3 border border-indigo-100 shadow-sm">
+									<p className="text-xs text-slate-500 font-medium">Algorithmic Match</p>
+									<p className="text-xl font-bold text-indigo-700">{(atsResult as any).algorithmic_score?.toFixed(1) || 0}%</p>
+								</div>
+								<div className="bg-white rounded-lg p-3 border border-indigo-100 shadow-sm">
+									<p className="text-xs text-slate-500 font-medium">AI Assessment</p>
+									<p className="text-xl font-bold text-indigo-700">{(atsResult as any).llm_score?.toFixed(1) || 0}%</p>
+								</div>
+							</div>
+
+							{(atsResult as any).missing_skills?.length > 0 && (
+								<div>
+									<p className="text-xs font-semibold text-indigo-800 mb-1">Missing Skills Identified:</p>
+									<div className="flex flex-wrap gap-1.5">
+										{(atsResult as any).missing_skills.slice(0, 5).map((skill: string, i: number) => (
+											<span key={i} className="px-2 py-1 bg-white border border-indigo-200 text-indigo-700 text-xs rounded-md">
+												{skill}
+											</span>
+										))}
+									</div>
+								</div>
+							)}
+						</div>
+					)}
 				</div>
 			</div>
 		);
@@ -212,11 +246,65 @@ export default function LiveInterview() {
 						</p>
 					</div>
 
-					{report && (
-						<div className="w-full rounded-xl border border-slate-200 bg-white p-5 text-left max-h-80 overflow-y-auto">
-							<pre className="text-xs text-slate-700 whitespace-pre-wrap font-mono">
-								{JSON.stringify(report, null, 2)}
-							</pre>
+					{report ? (
+						<div className="w-full text-left max-w-2xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 mb-4">
+							{/* Score Header */}
+							<div className="flex flex-col items-center justify-center p-6 bg-white rounded-2xl border border-slate-200 shadow-sm">
+								<p className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-2">Overall Score</p>
+								<div className="flex items-baseline gap-1">
+									<span className="text-6xl font-black text-slate-900">{(report as any).score || 0}</span>
+									<span className="text-2xl text-slate-400">/100</span>
+								</div>
+							</div>
+
+							{/* Domain Ratings */}
+							<div className="grid grid-cols-3 gap-3">
+								{Object.entries((report as any).domain_rating || {}).map(([domain, score]) => (
+									<div key={domain} className="bg-white rounded-xl p-4 border border-slate-200 text-center shadow-sm">
+										<p className="text-xs font-semibold text-slate-500 uppercase mb-1">{domain}</p>
+										<p className="text-xl font-bold text-emerald-600">{score as any}/100</p>
+									</div>
+								))}
+							</div>
+
+							{/* SWOT Analysis */}
+							<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+								<div className="bg-white rounded-xl p-4 border border-emerald-200 shadow-sm">
+									<h4 className="font-semibold text-emerald-800 mb-2 flex items-center gap-2">🟢 Key Strengths</h4>
+									<ul className="text-sm text-slate-600 space-y-1 pl-4 list-disc">
+										{((report as any).swot_analysis?.strengths || ["N/A"]).map((s: string, i: number) => <li key={i}>{s}</li>)}
+									</ul>
+								</div>
+								<div className="bg-white rounded-xl p-4 border border-rose-200 shadow-sm">
+									<h4 className="font-semibold text-rose-800 mb-2 flex items-center gap-2">🔴 Weaknesses</h4>
+									<ul className="text-sm text-slate-600 space-y-1 pl-4 list-disc">
+										{((report as any).swot_analysis?.weaknesses || ["N/A"]).map((s: string, i: number) => <li key={i}>{s}</li>)}
+									</ul>
+								</div>
+							</div>
+
+							{/* Feedback */}
+							<div className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm">
+								<h4 className="font-bold text-slate-800 mb-3">Actionable Feedback</h4>
+
+								<div className="mb-4">
+									<p className="text-sm font-semibold text-amber-600 mb-1">Key Mistakes:</p>
+									<ul className="text-sm text-slate-600 space-y-1 pl-4 list-disc">
+										{((report as any).mistakes || ["None identified."]).map((m: string, i: number) => <li key={i}>{m}</li>)}
+									</ul>
+								</div>
+
+								<div>
+									<p className="text-sm font-semibold text-blue-600 mb-1">Improvement Suggestions:</p>
+									<ul className="text-sm text-slate-600 space-y-1 pl-4 list-disc">
+										{((report as any).suggestions || ["N/A"]).map((s: string, i: number) => <li key={i}>{s}</li>)}
+									</ul>
+								</div>
+							</div>
+						</div>
+					) : (
+						<div className="w-full rounded-xl border border-slate-200 bg-white p-8 text-center text-slate-500 mb-4">
+							Failed to load report data.
 						</div>
 					)}
 

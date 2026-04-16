@@ -27,7 +27,7 @@ export default function AuthNavbar() {
                             </svg>
                         </div>
                         <span className="text-xl font-bold text-[#1E293B] group-hover:text-[#2563EB] transition-colors">
-                            BeaverAI
+                            IntrvAI
                         </span>
                     </Link>
                 </div>

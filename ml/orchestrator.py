@@ -196,7 +196,11 @@ class IntrvAIOrchestrator:
         """Post-interview evaluator."""
         if self._evaluator is None:
             from src.brain.evaluator import Evaluator
-            self._evaluator = Evaluator(model_path=settings.LLM_MODEL_PATH)
+            llm_model = self.llm.llm if self._llm_engine else None
+            self._evaluator = Evaluator(
+                model_path=settings.LLM_MODEL_PATH, 
+                llm_model=llm_model
+            )
         return self._evaluator
 
     @property

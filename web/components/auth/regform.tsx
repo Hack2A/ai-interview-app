@@ -145,7 +145,7 @@ export default function RegisterForm() {
         <div className="w-full max-w-md h-full flex flex-col justify-center">
             <div className="mb-8">
                 <h2 className="text-3xl font-bold text-[#1E293B] mb-2">Create Account</h2>
-                <p className="text-[#475569]">Get started with BeaverAI interview prep</p>
+                <p className="text-[#475569]">Get started with IntrvAI interview prep</p>
             </div>
 
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-3">

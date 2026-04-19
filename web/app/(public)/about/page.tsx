@@ -12,7 +12,7 @@ export default function About() {
                         <h1 className="text-5xl lg:text-6xl font-bold text-[#1E293B] mb-6">
                             About{" "}
                             <span className="bg-gradient-to-r from-[#3B82F6] to-[#2563EB] bg-clip-text text-transparent">
-                                BeaverAI
+                                IntrvAI
                             </span>
                         </h1>
                         <p className="text-xl text-[#475569] max-w-3xl mx-auto">
@@ -26,7 +26,7 @@ export default function About() {
                             <div>
                                 <h2 className="text-4xl font-bold text-[#1E293B] mb-6">Our Mission</h2>
                                 <p className="text-lg text-[#475569] mb-4 leading-relaxed">
-                                    At BeaverAI, we believe that everyone deserves a fair shot at their dream job. The interview process can be daunting, but with the right preparation and practice, anyone can excel.
+                                    At IntrvAI, we believe that everyone deserves a fair shot at their dream job. The interview process can be daunting, but with the right preparation and practice, anyone can excel.
                                 </p>
                                 <p className="text-lg text-[#475569] leading-relaxed">
                                     We've built an AI-powered platform that simulates realistic interview scenarios, provides instant feedback, and helps you continuously improve until you're ready to ace any interview with confidence.
@@ -157,7 +157,7 @@ export default function About() {
                             Ready to Transform Your Interview Skills?
                         </h2>
                         <p className="text-lg mb-8 max-w-2xl mx-auto opacity-90">
-                            Join thousands of successful candidates who have used BeaverAI to land their dream jobs
+                            Join thousands of successful candidates who have used IntrvAI to land their dream jobs
                         </p>
                         <a
                             href="/register"

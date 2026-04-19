@@ -54,7 +54,7 @@ export default function WhyChooseUs() {
                     className="text-center mb-16"
                 >
                     <h2 className="text-4xl lg:text-5xl font-bold text-[#1E293B] mb-4">
-                        Why Choose BeaverAI?
+                        Why Choose IntrvAI?
                     </h2>
                     <p className="text-xl text-[#475569] max-w-2xl mx-auto">
                         AI-powered interview preparation with comprehensive features to help you ace your next interview

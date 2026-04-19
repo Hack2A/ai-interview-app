@@ -18,7 +18,7 @@ export default function Footer() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
                 </svg>
               </div>
-              <span className="text-2xl font-bold text-[#1E293B]">BeaverAI</span>
+              <span className="text-2xl font-bold text-[#1E293B]">IntrvAI</span>
             </div>
             <p className="text-[#475569] leading-relaxed max-w-md mb-6">
               AI-powered interview preparation platform.
@@ -141,7 +141,7 @@ export default function Footer() {
         {/* Bottom Bar */}
         <div className="pt-8 border-t border-[#E2E8F0] flex flex-col md:flex-row justify-between items-center gap-4">
           <p className="text-[#475569] text-sm">
-            © 2026 BeaverAI. All rights reserved.
+            © 2026 IntrvAI. All rights reserved.
           </p>
           <div className="flex items-center gap-6 text-sm text-[#475569]">
             <span className="flex items-center gap-2">

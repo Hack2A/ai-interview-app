@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "BeaverAI - Your AI Interview Coach",
-  description: "BeaverAI is your AI interview coach which will help you in your interview prep.",
+  title: "IntrvAI - Your AI Interview Coach",
+  description: "IntrvAI is your AI interview coach which will help you in your interview prep.",
 };
 
 export default function RootLayout({

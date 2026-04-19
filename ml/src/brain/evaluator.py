@@ -13,7 +13,7 @@ EVAL_TEMPERATURE = 0.1
 class Evaluator:
     """Generates post-interview evaluation reports using the LLM (Ollama)."""
 
-    def __init__(self, model_path: str | Path) -> None:
+    def __init__(self, model_path: str | Path = None, llm_model: Llama | None = None) -> None:
         self.model_path = model_path
         self.llm = None
     
@@ -95,11 +95,15 @@ class Evaluator:
         except Exception as e:
             logger.error(f"Failed to generate evaluation: {e}", exc_info=True)
             return {
-                "error": "LLM call failed",
+                "error": "LLM returned invalid JSON payload",
                 "details": str(e),
-                "raw": None,
+                "raw": raw_content if 'raw_content' in locals() else None,
                 "score": 0,
-                "mistakes": ["Evaluation system error"],
-                "suggestions": ["Please try again"],
-                "domain_rating": {"hr": 0, "technical": 0, "communication": 0}
+                "mistakes": ["Evaluation system parsing error"],
+                "suggestions": ["Please review transcripts manually"],
+                "domain_rating": {"hr": 0, "technical": 0, "communication": 0},
+                "swot_analysis": {
+                    "strengths": ["N/A"], "weaknesses": ["N/A"],
+                    "opportunities": ["N/A"], "threats": ["N/A"]
+                }
             }

@@ -24,7 +24,7 @@ class STTEngine:
     def transcribe(self, audio_path: str, language: str | None = None) -> tuple[str, str]:
         """Transcribe audio file and return (text, detected_language)."""
         MAX_AUDIO_SIZE = 25 * 1024 * 1024
-        ALLOWED_EXTENSIONS = {'.wav', '.mp3', '.flac', '.m4a', '.ogg'}
+        ALLOWED_EXTENSIONS = {'.wav', '.mp3', '.flac', '.m4a', '.ogg', '.webm', '.weba'}
         
         if not audio_path:
             return "", "en"

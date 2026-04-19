@@ -7,7 +7,7 @@ const testimonials = [
         name: "Priya Sharma",
         role: "Software Engineer at Google",
         avatar: "PS",
-        review: "BeaverAI helped me land my dream job! The AI interviews felt incredibly realistic, and the detailed feedback after each session was invaluable for improvement.",
+        review: "IntrvAI helped me land my dream job! The AI interviews felt incredibly realistic, and the detailed feedback after each session was invaluable for improvement.",
         rating: 5
     },
     {
@@ -21,7 +21,7 @@ const testimonials = [
         name: "Sofia Chen",
         role: "Product Manager at Amazon",
         avatar: "SC",
-        review: "The variety of interview types is outstanding. From behavioral to technical, BeaverAI prepared me for every scenario. The transcript reviews helped me improve my communication.",
+        review: "The variety of interview types is outstanding. From behavioral to technical, IntrvAI prepared me for every scenario. The transcript reviews helped me improve my communication.",
         rating: 5
     }
 ];
@@ -46,7 +46,7 @@ export default function Testimonials() {
                         Success Stories
                     </h2>
                     <p className="text-xl text-[#475569] max-w-2xl mx-auto">
-                        Join thousands of professionals who landed their dream jobs with BeaverAI
+                        Join thousands of professionals who landed their dream jobs with IntrvAI
                     </p>
                 </motion.div>
 

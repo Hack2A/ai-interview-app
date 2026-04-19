@@ -1,6 +1,12 @@
 import os
 from pathlib import Path
 
+try:
+    import torch
+    _HAS_CUDA = torch.cuda.is_available()
+except ImportError:
+    _HAS_CUDA = False
+
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 MODELS_DIR = BASE_DIR / "models"
@@ -12,11 +18,11 @@ LLM_MODEL_PATH = MODELS_DIR / "llm" / LLM_MODEL_NAME
 
 CONTEXT_SIZE = 4096
 N_THREADS = 8
-N_GPU_LAYERS = -1
+N_GPU_LAYERS = -1 if _HAS_CUDA else 0
 
 
 STT_MODEL_SIZE = "small.en"
-STT_DEVICE = "cuda"
+STT_DEVICE = "cuda" if _HAS_CUDA else "cpu"
 
 
 TTS_MODEL_NAME = "en_US-ryan-medium.onnx"

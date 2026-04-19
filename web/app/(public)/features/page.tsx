@@ -146,7 +146,7 @@ export default function Features() {
                             Ready to Start Practicing?
                         </h2>
                         <p className="text-lg text-[#475569] mb-8 max-w-2xl mx-auto">
-                            Join thousands of professionals who have improved their interview skills with BeaverAI
+                            Join thousands of professionals who have improved their interview skills with IntrvAI
                         </p>
                         <a
                             href="/register"

@@ -22,7 +22,7 @@ export default function Register() {
                     </div>
 
                     <h1 className="text-5xl font-bold text-[#1E293B]">
-                        Join BeaverAI
+                        Join IntrvAI
                     </h1>
                     <p className="text-xl text-[#475569] max-w-md mx-auto leading-relaxed">
                         Create your account and start your journey to interview success with AI-powered preparation.

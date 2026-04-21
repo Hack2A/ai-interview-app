@@ -6,6 +6,25 @@ interface UseRealtimeStreamOptions {
 	volumeThreshold?: number; // 0 to 255 volume threshold
 }
 
+/** Pick the best supported mimeType for MediaRecorder, or '' for the browser default. */
+function getSupportedMimeType(): string {
+	const candidates = [
+		"audio/webm;codecs=opus",
+		"audio/webm",
+		"audio/ogg;codecs=opus",
+		"audio/ogg",
+		"audio/mp4",
+	];
+	for (const type of candidates) {
+		if (MediaRecorder.isTypeSupported(type)) {
+			console.log(`🎙️ MediaRecorder using: ${type}`);
+			return type;
+		}
+	}
+	console.warn("🎙️ No preferred mimeType supported, using browser default.");
+	return "";
+}
+
 /**
  * Hook that captures audio from a MediaStream via MediaRecorder.
  * Monitors volume using Web Audio API to detect when the user stops speaking.
@@ -21,6 +40,10 @@ export function useRealtimeStream(
 	const mediaRecorderRef = useRef<MediaRecorder | null>(null);
 	const isStreamingRef = useRef(false);
 	const sendAudioRef = useRef(sendAudio);
+
+	// Keep refs to the inner functions so restartStreaming never goes stale
+	const startStreamingRef = useRef<() => void>(() => { });
+	const stopStreamingRef = useRef<() => void>(() => { });
 
 	const [isStreaming, setIsStreaming] = useState(false);
 	const [isSpeaking, setIsSpeaking] = useState(false);
@@ -55,9 +78,11 @@ export function useRealtimeStream(
 	useEffect(() => {
 		if (!stream) return;
 		if (autoStart && !isStreamingRef.current) {
-			startStreaming();
+			startStreamingRef.current();
 		} else if (isStreamingRef.current) {
-			restartStreaming();
+			// Stream device changed — restart
+			stopStreamingRef.current();
+			setTimeout(() => startStreamingRef.current(), 150);
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [stream]);
@@ -86,8 +111,9 @@ export function useRealtimeStream(
 				const silenceDuration = Date.now() - lastSpokeAtRef.current;
 				if (silenceDuration > silenceDelay) {
 					console.log(`🎙️ VAD: ${silenceDelay}ms silence detected. Auto-sending audio...`);
-					hasSpokenRef.current = false; // Reset for next chunk
-					restartStreaming(); // This stops recorder, sends audio, and restarts
+					hasSpokenRef.current = false;
+					stopStreamingRef.current();
+					setTimeout(() => startStreamingRef.current(), 150);
 					return; // Break animation frame
 				}
 			}
@@ -99,15 +125,26 @@ export function useRealtimeStream(
 	const startStreaming = () => {
 		if (!stream || isStreamingRef.current) return;
 
+		// Ensure the stream has live audio tracks
+		const audioTracks = stream.getAudioTracks();
+		if (audioTracks.length === 0) {
+			console.warn("🎙️ No audio tracks available in stream.");
+			return;
+		}
+		if (audioTracks.every((t) => t.readyState === "ended")) {
+			console.warn("🎙️ All audio tracks have ended.");
+			return;
+		}
+
 		try {
 			if (audioContextRef.current?.state === "suspended") {
 				audioContextRef.current.resume();
 			}
 
 			const audioStream = new MediaStream(stream.getAudioTracks());
-			const recorder = new MediaRecorder(audioStream, {
-				mimeType: "audio/webm;codecs=opus",
-			});
+			const mimeType = getSupportedMimeType();
+			const recorderOptions = mimeType ? { mimeType } : {};
+			const recorder = new MediaRecorder(audioStream, recorderOptions);
 
 			const audioChunks: Blob[] = [];
 
@@ -121,13 +158,16 @@ export function useRealtimeStream(
 
 			recorder.onstop = () => {
 				if (audioChunks.length > 0) {
-					const audioBlob = new Blob(audioChunks, { type: "audio/webm;codecs=opus" });
+					const blobType = mimeType || "audio/webm";
+					const audioBlob = new Blob(audioChunks, { type: blobType });
+					console.log(`🎙️ Sending audio blob: ${audioBlob.size} bytes, type=${blobType}`);
 					sendAudioRef.current(audioBlob);
 				}
 			};
 
 			recorder.start();
 			mediaRecorderRef.current = recorder;
+			isStreamingRef.current = true;
 			setIsStreaming(true);
 			hasSpokenRef.current = false;
 			setIsSpeaking(false);
@@ -163,21 +203,27 @@ export function useRealtimeStream(
 		} catch (err) {
 			console.error("❌ Stop error:", err);
 		} finally {
+			isStreamingRef.current = false;
 			setIsStreaming(false);
 			setIsSpeaking(false);
 		}
 	};
 
+	// Keep the refs in sync with the latest function instances
+	useEffect(() => {
+		startStreamingRef.current = startStreaming;
+		stopStreamingRef.current = stopStreaming;
+	});
+
+	// Stable callback exposed to consumers — always calls through the ref
 	const restartStreaming = useCallback(() => {
-		stopStreaming();
-		setTimeout(() => {
-			startStreaming();
-		}, 150);
+		stopStreamingRef.current();
+		setTimeout(() => startStreamingRef.current(), 150);
 	}, []);
 
 	useEffect(() => {
 		return () => {
-			stopStreaming();
+			stopStreamingRef.current();
 		};
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []);

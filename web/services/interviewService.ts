@@ -299,7 +299,7 @@ export class InterviewWebSocket {
 				this.callbacks.onStreamChunk?.(msg.text);
 				break;
 			case "stream_end":
-				this.callbacks.onStreamEnd?.(msg.text, msg.toxicity);
+				this.callbacks.onStreamEnd?.(msg.text, msg.toxicity, msg.audio_url);
 				break;
 			case "response":
 				this.callbacks.onResponse?.(msg.text);

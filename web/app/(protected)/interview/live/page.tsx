@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useNavbar } from "../../NavbarContext";
 import { useControlbar } from "@/hooks/controlbarHooks";
@@ -12,13 +12,14 @@ import ControlBar from "@/components/interview/liveInterview/ControlBar";
 import TranscriptPanel from "@/components/interview/liveInterview/TranscriptPanel";
 import SettingsModal from "@/components/interview/liveInterview/SettingsModal";
 import DisconnectModal from "@/components/interview/liveInterview/DisconnectModal";
-import { Loader2, AlertCircle, ArrowLeft, CheckCircle2 } from "lucide-react";
+import { Loader2, AlertCircle, ArrowLeft, CheckCircle2, Bug } from "lucide-react";
 
 /* ─────────────────────────────────────────────────────────── */
 
 export default function LiveInterview() {
 	const { setShowNavbar } = useNavbar();
 	const router = useRouter();
+	const [showDebug, setShowDebug] = useState(false);
 
 	// ── Interview WebSocket lifecycle ────────────────────────────────
 	const {
@@ -27,9 +28,14 @@ export default function LiveInterview() {
 		transcript,
 		streamingText,
 		isAITyping,
+		isAISpeaking,
+		isUserSpeaking,
 		error,
 		report,
 		atsResult,
+		sessionId,
+		wsConnected,
+		audioSentCount,
 		sendAudio,
 		endInterview,
 	} = useInterview();
@@ -57,7 +63,7 @@ export default function LiveInterview() {
 	} = useControlbar();
 
 	// ── Audio streaming (sends mic chunks to WS) ────────────────────
-	const { stopStreaming } = useRealtimeStream(
+	const { stopStreaming, isStreaming, isSpeaking } = useRealtimeStream(
 		// Only start streaming audio once the interview is active
 		phase === "active" ? stream : null,
 		sendAudio,
@@ -338,6 +344,8 @@ export default function LiveInterview() {
 						isVideoOff={isVideoOff}
 						isMuted={isMuted}
 						userName="Akshat Pratyush"
+						isAISpeaking={isAISpeaking}
+						isUserSpeaking={isUserSpeaking || isSpeaking}
 					/>
 					<ControlBar
 						isMuted={isMuted}
@@ -354,8 +362,66 @@ export default function LiveInterview() {
 					entries={transcript}
 					streamingText={streamingText}
 					isAITyping={isAITyping}
+					isAISpeaking={isAISpeaking}
+					isUserSpeaking={isUserSpeaking || isSpeaking}
 				/>
 			</div>
+
+			{/* ── Debug overlay (toggle with Bug icon) ── */}
+			<button
+				onClick={() => setShowDebug((v) => !v)}
+				className="fixed bottom-4 left-4 z-50 flex items-center justify-center w-8 h-8 rounded-full bg-slate-800/80 text-slate-400 hover:text-white hover:bg-slate-700 transition-colors"
+				title="Toggle debug overlay"
+			>
+				<Bug className="w-4 h-4" />
+			</button>
+
+			{showDebug && (
+				<div className="fixed bottom-14 left-4 z-50 w-72 rounded-xl bg-slate-900/95 backdrop-blur-sm border border-slate-700 p-4 text-xs font-mono text-slate-300 space-y-1.5 shadow-2xl">
+					<p className="text-slate-400 font-semibold text-[10px] uppercase tracking-wider mb-2">Debug Panel</p>
+					<div className="flex justify-between">
+						<span>WS connected</span>
+						<span className={wsConnected ? "text-emerald-400" : "text-red-400"}>{wsConnected ? "✓ yes" : "✗ no"}</span>
+					</div>
+					<div className="flex justify-between">
+						<span>Phase</span>
+						<span className="text-amber-300">{phase}</span>
+					</div>
+					<div className="flex justify-between">
+						<span>Mic streaming</span>
+						<span className={isStreaming ? "text-emerald-400" : "text-slate-500"}>{isStreaming ? "✓ active" : "idle"}</span>
+					</div>
+					<div className="flex justify-between">
+						<span>VAD speaking</span>
+						<span className={isSpeaking ? "text-blue-400" : "text-slate-500"}>{isSpeaking ? "✓ yes" : "no"}</span>
+					</div>
+					<div className="flex justify-between">
+						<span>Audio blobs sent</span>
+						<span className="text-blue-300">{audioSentCount}</span>
+					</div>
+					<div className="flex justify-between">
+						<span>AI typing</span>
+						<span className={isAITyping ? "text-violet-400" : "text-slate-500"}>{isAITyping ? "✓ yes" : "no"}</span>
+					</div>
+					<div className="flex justify-between">
+						<span>AI speaking</span>
+						<span className={isAISpeaking ? "text-violet-400" : "text-slate-500"}>{isAISpeaking ? "✓ yes" : "no"}</span>
+					</div>
+					<div className="flex justify-between">
+						<span>Stream source</span>
+						<span className={stream ? "text-emerald-400" : "text-red-400"}>{stream ? `${stream.getTracks().length} track(s)` : "none"}</span>
+					</div>
+					<div className="flex justify-between">
+						<span>Session ID</span>
+						<span className="text-slate-400 truncate max-w-[120px]">{sessionId?.slice(0, 12) ?? "—"}</span>
+					</div>
+					<div className="flex justify-between">
+						<span>Transcript entries</span>
+						<span className="text-slate-300">{transcript.length}</span>
+					</div>
+					<p className="text-[9px] text-slate-500 mt-2">Open DevTools console for full logs</p>
+				</div>
+			)}
 
 			{/* Settings modal */}
 			<SettingsModal

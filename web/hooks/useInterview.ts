@@ -38,10 +38,14 @@ export interface UseInterviewReturn {
 	transcript: TranscriptEntry[];
 	streamingText: string;
 	isAITyping: boolean;
+	isAISpeaking: boolean;       // true while AI audio is playing
+	isUserSpeaking: boolean;     // true while STT is transcribing user audio
 	error: string | null;
 	report: Record<string, unknown> | null;
 	atsResult: Record<string, unknown> | null;
 	sessionId: string | null;
+	wsConnected: boolean;         // live WS connection state for debug overlay
+	audioSentCount: number;       // how many audio blobs sent (for debug overlay)
 	sendAnswer: (text: string) => void;
 	sendAudio: (data: Blob | ArrayBuffer) => void;
 	endInterview: () => void;
@@ -89,10 +93,14 @@ export function useInterview(): UseInterviewReturn {
 	const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
 	const [streamingText, setStreamingText] = useState("");
 	const [isAITyping, setIsAITyping] = useState(false);
+	const [isAISpeaking, setIsAISpeaking] = useState(false);
+	const [isUserSpeaking, setIsUserSpeaking] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [report, setReport] = useState<Record<string, unknown> | null>(null);
 	const [atsResult, setAtsResult] = useState<Record<string, unknown> | null>(null);
 	const [sessionId, setSessionId] = useState<string | null>(null);
+	const [wsConnected, setWsConnected] = useState(false);
+	const [audioSentCount, setAudioSentCount] = useState(0);
 
 	const wsRef = useRef<InterviewWebSocket | null>(null);
 	const startTimeRef = useRef<number>(Date.now());
@@ -110,22 +118,42 @@ export function useInterview(): UseInterviewReturn {
 	const playAudioFromUrl = useCallback(async (audioUrl: string) => {
 		if (!audioUrl) return;
 		try {
-			// Construct full URL using backend Base URL. e.g. "http://localhost:8000/media/audio/..."
-			const backendUrl = process.env.NEXT_PUBLIC_API_URL?.replace("/api", "") || "http://localhost:8000";
-			const fullUrl = `${backendUrl}${audioUrl}`;
+			// Build the full URL — strip trailing /api/ to get the backend root
+			const backendUrl =
+				(process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/")
+					.replace(/\/api\/?$/, "");
+
+			// audioUrl may be absolute or relative (e.g. /media/audio/…)
+			const fullUrl = audioUrl.startsWith("http") ? audioUrl : `${backendUrl}${audioUrl}`;
+			console.log("🔊 Playing AI audio:", fullUrl);
 
 			const audio = new Audio(fullUrl);
 
+			audio.onplay = () => setIsAISpeaking(true);
+			audio.onended = () => setIsAISpeaking(false);
+			audio.onerror = (e) => {
+				console.error("🔊 Audio play error:", e, fullUrl);
+				setIsAISpeaking(false);
+			};
+
 			if (audioQueueRef.current && !audioQueueRef.current.ended) {
+				// Queue after the current clip finishes
 				audioQueueRef.current.onended = () => {
-					audio.play().catch(() => { });
+					audioQueueRef.current = audio;
+					audio.play().catch((err) => {
+						console.error("🔊 Queued audio play failed:", err);
+						setIsAISpeaking(false);
+					});
 				};
 			} else {
-				audio.play().catch(() => { });
+				audioQueueRef.current = audio;
+				audio.play().catch((err) => {
+					console.error("🔊 Audio play failed:", err);
+					setIsAISpeaking(false);
+				});
 			}
-			audioQueueRef.current = audio;
 		} catch (err) {
-			console.warn("Audio playback failed:", err);
+			console.warn("🔊 Audio playback setup failed:", err);
 		}
 	}, []);
 
@@ -152,13 +180,17 @@ export function useInterview(): UseInterviewReturn {
 		setPhase("loading");
 		setError(null);
 		setStatusMessage("Initializing…");
+		setWsConnected(false);
+		setAudioSentCount(0);
 
 		const ws = new InterviewWebSocket({
 			onConnected: (msg) => {
 				if (disposed) return;
 				setSessionId(msg.session_id);
 				setPhase("setting-up");
+				setWsConnected(true);
 				setStatusMessage("Connected. Setting up your interview…");
+				console.log("✅ WS connected, session:", msg.session_id);
 
 				const setup: Omit<WSSetupMessage, "type"> = {
 					difficulty: config.difficulty,
@@ -180,13 +212,14 @@ export function useInterview(): UseInterviewReturn {
 			onStatus: (msg) => {
 				if (disposed) return;
 				setStatusMessage(msg.message);
+				console.log("📡 WS status:", msg.message);
 			},
 
 			onATSResult: (msg) => {
 				if (disposed) return;
 				setStatusMessage("ATS analysis complete. Preparing questions…");
 				setAtsResult(msg.data);
-				console.log("ATS Result:", msg.data);
+				console.log("📊 ATS Result:", msg.data);
 			},
 
 			onQuestion: (msg) => {
@@ -204,14 +237,21 @@ export function useInterview(): UseInterviewReturn {
 					timestamp: formatTimestamp(startTimeRef.current),
 				};
 				setTranscript((prev) => [...prev, entry]);
+				console.log("❓ Question received:", msg.text.substring(0, 80));
 
-				if (msg.audio_url) playAudioFromUrl(msg.audio_url);
+				if (msg.audio_url) {
+					console.log("🔊 Question audio_url:", msg.audio_url);
+					playAudioFromUrl(msg.audio_url);
+				} else {
+					console.warn("🔊 No audio_url in question message");
+				}
 			},
 
 			onStreamStart: () => {
 				setIsAITyping(true);
 				setStreamingText("");
 				streamBufferRef.current = "";
+				console.log("🤖 AI stream started");
 			},
 
 			onStreamChunk: (chunk) => {
@@ -231,8 +271,13 @@ export function useInterview(): UseInterviewReturn {
 					timestamp: formatTimestamp(startTimeRef.current),
 				};
 				setTranscript((prev) => [...prev, entry]);
+				console.log("🤖 AI stream end. audio_url:", audioUrl ?? "none");
 
-				if (audioUrl) playAudioFromUrl(audioUrl);
+				if (audioUrl) {
+					playAudioFromUrl(audioUrl);
+				} else {
+					console.warn("🔊 No audio_url in stream_end — AI voice won't play");
+				}
 			},
 
 			onResponse: () => {
@@ -240,6 +285,7 @@ export function useInterview(): UseInterviewReturn {
 			},
 
 			onTranscription: (text) => {
+				setIsUserSpeaking(false); // STT done
 				const entry: TranscriptEntry = {
 					id: nextId(),
 					speaker: "You",
@@ -247,6 +293,7 @@ export function useInterview(): UseInterviewReturn {
 					timestamp: formatTimestamp(startTimeRef.current),
 				};
 				setTranscript((prev) => [...prev, entry]);
+				console.log("📝 Transcription received:", text.substring(0, 80));
 			},
 
 			onReport: (msg: WSReportMessage) => {
@@ -257,7 +304,7 @@ export function useInterview(): UseInterviewReturn {
 
 			onError: (message) => {
 				if (disposed) return;
-				console.error("WS Error:", message);
+				console.error("❌ WS Error:", message);
 				const current = phaseRef.current;
 				if (current === "loading" || current === "setting-up") {
 					setError(message);
@@ -267,6 +314,8 @@ export function useInterview(): UseInterviewReturn {
 
 			onClose: (code) => {
 				if (disposed) return;
+				setWsConnected(false);
+				console.log("🔌 WS closed, code:", code);
 				const current = phaseRef.current;
 				// Ignore close during completed/error/ending/loading (Strict Mode cleanup)
 				if (
@@ -293,7 +342,7 @@ export function useInterview(): UseInterviewReturn {
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []);
 
-	// ── Public actions ───────────────────────────────────────────────────
+	// ── Public actions ───────────────────────────────────────────────
 
 	const sendAnswer = useCallback((text: string) => {
 		if (!wsRef.current?.isConnected) return;
@@ -310,9 +359,17 @@ export function useInterview(): UseInterviewReturn {
 	}, []);
 
 	const sendAudio = useCallback((data: Blob | ArrayBuffer) => {
-		if (!wsRef.current?.isConnected) return;
+		if (!wsRef.current?.isConnected) {
+			console.warn("⚠️ sendAudio: WS not connected, dropping audio blob");
+			return;
+		}
+		// Show user is speaking while audio is in-flight
+		setIsUserSpeaking(true);
+		setAudioSentCount((n) => n + 1);
+		const size = data instanceof Blob ? data.size : (data as ArrayBuffer).byteLength;
+		console.log(`🎤 Sending audio blob #${audioSentCount + 1}: ${size} bytes`);
 		wsRef.current.sendAudio(data);
-	}, []);
+	}, [audioSentCount]);
 
 	const endInterview = useCallback(() => {
 		if (!wsRef.current?.isConnected) return;
@@ -327,10 +384,14 @@ export function useInterview(): UseInterviewReturn {
 		transcript,
 		streamingText,
 		isAITyping,
+		isAISpeaking,
+		isUserSpeaking,
 		error,
 		report,
 		atsResult,
 		sessionId,
+		wsConnected,
+		audioSentCount,
 		sendAnswer,
 		sendAudio,
 		endInterview,

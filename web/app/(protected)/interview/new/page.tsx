@@ -23,6 +23,14 @@ export default function NewInterview() {
     const cameraStreamRef = useRef<MediaStream | null>(null);
     const microphoneStreamRef = useRef<MediaStream | null>(null);
 
+    // Device lists and selections
+    const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([]);
+    const [availableMics, setAvailableMics] = useState<MediaDeviceInfo[]>([]);
+    const [availableSpeakers, setAvailableSpeakers] = useState<MediaDeviceInfo[]>([]);
+    const [selectedCameraId, setSelectedCameraId] = useState<string>("");
+    const [selectedMicId, setSelectedMicId] = useState<string>("");
+    const [selectedSpeakerId, setSelectedSpeakerId] = useState<string>("");
+
     const {
         control,
         register,
@@ -73,12 +81,33 @@ export default function NewInterview() {
         }
     }, [interviewType, setValue]);
 
+    // Stop streams on unmount
     useEffect(() => {
         return () => {
             cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
             microphoneStreamRef.current?.getTracks().forEach((track) => track.stop());
         };
     }, []);
+
+    /** Enumerate all media devices and update the state lists. */
+    const refreshDevices = async () => {
+        try {
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const cameras = devices.filter((d) => d.kind === "videoinput");
+            const mics = devices.filter((d) => d.kind === "audioinput");
+            const speakers = devices.filter((d) => d.kind === "audiooutput");
+            setAvailableCameras(cameras);
+            setAvailableMics(mics);
+            setAvailableSpeakers(speakers);
+
+            // Set defaults only when they haven't been chosen yet
+            setSelectedCameraId((prev) => prev || cameras[0]?.deviceId || "");
+            setSelectedMicId((prev) => prev || mics[0]?.deviceId || "");
+            setSelectedSpeakerId((prev) => prev || speakers[0]?.deviceId || "");
+        } catch (err) {
+            console.warn("Could not enumerate devices:", err);
+        }
+    };
 
     const validateCurrentStep = async () => {
         if (currentStep === 1) {
@@ -117,7 +146,7 @@ export default function NewInterview() {
         setCurrentStep((prev) => Math.max(prev - 1, 1));
     };
 
-    const handleCameraCheck = async () => {
+    const handleCameraCheck = async (deviceId?: string) => {
         if (!navigator.mediaDevices?.getUserMedia) {
             setCameraStatus("blocked");
             setValue("cameraChecked", false);
@@ -128,7 +157,9 @@ export default function NewInterview() {
 
         try {
             cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
-            const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+
+            const videoConstraint = deviceId ? { deviceId: { exact: deviceId } } : true;
+            const stream = await navigator.mediaDevices.getUserMedia({ video: videoConstraint, audio: false });
             cameraStreamRef.current = stream;
 
             if (videoRef.current) {
@@ -138,13 +169,16 @@ export default function NewInterview() {
 
             setCameraStatus("ready");
             setValue("cameraChecked", true, { shouldDirty: true });
+
+            // Enumerate devices now that we have permission
+            await refreshDevices();
         } catch {
             setCameraStatus("blocked");
             setValue("cameraChecked", false, { shouldDirty: true });
         }
     };
 
-    const handleMicrophoneCheck = async () => {
+    const handleMicrophoneCheck = async (deviceId?: string) => {
         if (!navigator.mediaDevices?.getUserMedia) {
             setMicrophoneStatus("blocked");
             setValue("microphoneChecked", false);
@@ -155,10 +189,15 @@ export default function NewInterview() {
 
         try {
             microphoneStreamRef.current?.getTracks().forEach((track) => track.stop());
-            const stream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
+
+            const audioConstraint = deviceId ? { deviceId: { exact: deviceId } } : true;
+            const stream = await navigator.mediaDevices.getUserMedia({ video: false, audio: audioConstraint });
             microphoneStreamRef.current = stream;
             setMicrophoneStatus("ready");
             setValue("microphoneChecked", true, { shouldDirty: true });
+
+            // Enumerate devices now that we have permission
+            await refreshDevices();
         } catch {
             setMicrophoneStatus("blocked");
             setValue("microphoneChecked", false, { shouldDirty: true });
@@ -224,6 +263,10 @@ export default function NewInterview() {
             proctoring: data.aiProctoring,
         });
 
+        // Stop preview streams before navigating (live page acquires its own)
+        cameraStreamRef.current?.getTracks().forEach((t) => t.stop());
+        microphoneStreamRef.current?.getTracks().forEach((t) => t.stop());
+
         // Redirect to the live interview page
         router.push("/interview/live");
     };
@@ -265,6 +308,16 @@ export default function NewInterview() {
                             interviewType={interviewType}
                             difficulty={difficulty}
                             aiProctoring={aiProctoring}
+                            availableCameras={availableCameras}
+                            availableMics={availableMics}
+                            availableSpeakers={availableSpeakers}
+                            selectedCameraId={selectedCameraId}
+                            selectedMicId={selectedMicId}
+                            selectedSpeakerId={selectedSpeakerId}
+                            onCameraChange={setSelectedCameraId}
+                            onMicChange={setSelectedMicId}
+                            onSpeakerChange={setSelectedSpeakerId}
+                            micStream={microphoneStreamRef.current}
                         />
                     )}
 

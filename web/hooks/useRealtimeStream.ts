@@ -4,6 +4,7 @@ interface UseRealtimeStreamOptions {
 	autoStart?: boolean;
 	silenceDelay?: number; // MS of silence before auto-sending
 	volumeThreshold?: number; // 0 to 255 volume threshold
+	enabled?: boolean; // When false, recording is paused (e.g. while AI is speaking)
 }
 
 /** Pick the best supported mimeType for MediaRecorder, or '' for the browser default. */
@@ -29,21 +30,32 @@ function getSupportedMimeType(): string {
  * Hook that captures audio from a MediaStream via MediaRecorder.
  * Monitors volume using Web Audio API to detect when the user stops speaking.
  * Sends the combined binary blob through `sendAudio` upon silence detection.
+ *
+ * Key features:
+ * - `enabled` flag pauses/resumes recording (e.g. mute while AI is speaking)
+ * - `manualSend()` immediately stops recording and sends captured audio
+ * - Auto-restarts recording after sending
  */
 export function useRealtimeStream(
 	stream: MediaStream | null,
 	sendAudio: (data: Blob) => void,
 	options: UseRealtimeStreamOptions = {},
 ) {
-	const { autoStart = false, silenceDelay = 2000, volumeThreshold = 10 } = options;
+	const {
+		autoStart = false,
+		silenceDelay = 2500,
+		volumeThreshold = 30,
+		enabled = true,
+	} = options;
 
 	const mediaRecorderRef = useRef<MediaRecorder | null>(null);
 	const isStreamingRef = useRef(false);
 	const sendAudioRef = useRef(sendAudio);
+	const enabledRef = useRef(enabled);
 
 	// Keep refs to the inner functions so restartStreaming never goes stale
 	const startStreamingRef = useRef<() => void>(() => { });
-	const stopStreamingRef = useRef<() => void>(() => { });
+	const stopStreamingRef = useRef<(send?: boolean) => void>(() => { });
 
 	const [isStreaming, setIsStreaming] = useState(false);
 	const [isSpeaking, setIsSpeaking] = useState(false);
@@ -75,13 +87,28 @@ export function useRealtimeStream(
 		sendAudioRef.current = sendAudio;
 	}, [sendAudio]);
 
+	// Track enabled changes — pause/resume recording accordingly
+	useEffect(() => {
+		enabledRef.current = enabled;
+		if (!enabled && isStreamingRef.current) {
+			// AI is speaking — stop recording WITHOUT sending
+			console.log("🎙️ Pausing recording (AI turn)");
+			stopStreamingRef.current(false);
+		} else if (enabled && !isStreamingRef.current && stream) {
+			// AI finished — resume recording
+			console.log("🎙️ Resuming recording (user turn)");
+			setTimeout(() => startStreamingRef.current(), 200);
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [enabled]);
+
 	useEffect(() => {
 		if (!stream) return;
-		if (autoStart && !isStreamingRef.current) {
+		if (autoStart && !isStreamingRef.current && enabledRef.current) {
 			startStreamingRef.current();
 		} else if (isStreamingRef.current) {
 			// Stream device changed — restart
-			stopStreamingRef.current();
+			stopStreamingRef.current(false);
 			setTimeout(() => startStreamingRef.current(), 150);
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
@@ -104,7 +131,7 @@ export function useRealtimeStream(
 			if (!hasSpokenRef.current) {
 				hasSpokenRef.current = true;
 				setIsSpeaking(true);
-				console.log("🎙️ VAD: Speech detected.");
+				console.log(`🎙️ VAD: Speech detected (vol=${averageVolume.toFixed(0)}, threshold=${volumeThreshold}).`);
 			}
 		} else {
 			if (hasSpokenRef.current) {
@@ -112,8 +139,10 @@ export function useRealtimeStream(
 				if (silenceDuration > silenceDelay) {
 					console.log(`🎙️ VAD: ${silenceDelay}ms silence detected. Auto-sending audio...`);
 					hasSpokenRef.current = false;
-					stopStreamingRef.current();
-					setTimeout(() => startStreamingRef.current(), 150);
+					stopStreamingRef.current(true); // send=true
+					setTimeout(() => {
+						if (enabledRef.current) startStreamingRef.current();
+					}, 150);
 					return; // Break animation frame
 				}
 			}
@@ -124,6 +153,7 @@ export function useRealtimeStream(
 
 	const startStreaming = () => {
 		if (!stream || isStreamingRef.current) return;
+		if (!enabledRef.current) return; // Don't start if disabled
 
 		// Ensure the stream has live audio tracks
 		const audioTracks = stream.getAudioTracks();
@@ -157,7 +187,8 @@ export function useRealtimeStream(
 			recorder.onerror = (err) => console.error("❌ Recorder error:", err);
 
 			recorder.onstop = () => {
-				if (audioChunks.length > 0) {
+				// Only send if we have chunks AND the send flag was set
+				if (audioChunks.length > 0 && (recorder as any).__shouldSend) {
 					const blobType = mimeType || "audio/webm";
 					const audioBlob = new Blob(audioChunks, { type: blobType });
 					console.log(`🎙️ Sending audio blob: ${audioBlob.size} bytes, type=${blobType}`);
@@ -191,12 +222,14 @@ export function useRealtimeStream(
 		}
 	};
 
-	const stopStreaming = () => {
+	const stopStreaming = (send: boolean = true) => {
 		// Stop VAD loop but DO NOT close the AudioContext
 		if (vadFrameRef.current) cancelAnimationFrame(vadFrameRef.current);
 
 		try {
 			if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+				// Tag the recorder so onstop knows whether to send
+				(mediaRecorderRef.current as any).__shouldSend = send;
 				mediaRecorderRef.current.stop();
 			}
 			mediaRecorderRef.current = null;
@@ -217,13 +250,26 @@ export function useRealtimeStream(
 
 	// Stable callback exposed to consumers — always calls through the ref
 	const restartStreaming = useCallback(() => {
-		stopStreamingRef.current();
+		stopStreamingRef.current(false);
 		setTimeout(() => startStreamingRef.current(), 150);
+	}, []);
+
+	/**
+	 * Manually send whatever audio has been recorded so far.
+	 * Stops the current recording, sends the blob, then restarts.
+	 */
+	const manualSend = useCallback(() => {
+		if (!isStreamingRef.current) return;
+		console.log("🎙️ Manual send triggered by user.");
+		stopStreamingRef.current(true); // send=true
+		setTimeout(() => {
+			if (enabledRef.current) startStreamingRef.current();
+		}, 200);
 	}, []);
 
 	useEffect(() => {
 		return () => {
-			stopStreamingRef.current();
+			stopStreamingRef.current(false);
 		};
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []);
@@ -233,5 +279,7 @@ export function useRealtimeStream(
 		stopStreaming,
 		isStreaming,
 		isSpeaking,
+		manualSend,
+		restartStreaming,
 	};
 }

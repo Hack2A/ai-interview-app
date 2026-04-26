@@ -304,6 +304,7 @@ export class InterviewWebSocket {
 			case "response":
 				this.callbacks.onResponse?.(msg.text);
 				break;
+			case "transcript":
 			case "transcription":
 				this.callbacks.onTranscription?.(msg.text);
 				break;

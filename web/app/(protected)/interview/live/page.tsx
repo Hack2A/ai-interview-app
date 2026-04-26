@@ -12,6 +12,8 @@ import ControlBar from "@/components/interview/liveInterview/ControlBar";
 import TranscriptPanel from "@/components/interview/liveInterview/TranscriptPanel";
 import SettingsModal from "@/components/interview/liveInterview/SettingsModal";
 import DisconnectModal from "@/components/interview/liveInterview/DisconnectModal";
+import InterviewReport from "@/components/interview/InterviewReport";
+import type { InterviewReportData } from "@/components/interview/InterviewReport";
 import { Loader2, AlertCircle, ArrowLeft, CheckCircle2, Bug } from "lucide-react";
 
 /* ─────────────────────────────────────────────────────────── */
@@ -21,26 +23,7 @@ export default function LiveInterview() {
 	const router = useRouter();
 	const [showDebug, setShowDebug] = useState(false);
 
-	// ── Interview WebSocket lifecycle ────────────────────────────────
-	const {
-		phase,
-		statusMessage,
-		transcript,
-		streamingText,
-		isAITyping,
-		isAISpeaking,
-		isUserSpeaking,
-		error,
-		report,
-		atsResult,
-		sessionId,
-		wsConnected,
-		audioSentCount,
-		sendAudio,
-		endInterview,
-	} = useInterview();
-
-	// ── Camera / mic / controls ─────────────────────────────────────
+	// ── Camera / mic / controls (initialized first for selectedSpeaker) ──
 	const {
 		isMuted,
 		isVideoOff,
@@ -60,7 +43,29 @@ export default function LiveInterview() {
 		handleToggleVideo,
 		handleCameraChange,
 		handleMicChange,
+		stopAllTracks,
 	} = useControlbar();
+
+	// ── Interview WebSocket lifecycle ────────────────────────────────
+	const {
+		phase,
+		statusMessage,
+		transcript,
+		streamingText,
+		isAITyping,
+		isAISpeaking,
+		isUserSpeaking,
+		error,
+		report,
+		atsResult,
+		sessionId,
+		wsConnected,
+		audioSentCount,
+		audioUnlocked,
+		sendAudio,
+		endInterview,
+		unlockAudio,
+	} = useInterview(selectedSpeaker);
 
 	// ── Audio streaming (sends mic chunks to WS) ────────────────────
 	const isUserTurn = phase === "active" && !isAITyping && !isAISpeaking;
@@ -71,16 +76,33 @@ export default function LiveInterview() {
 		{ autoStart: true, enabled: isUserTurn },
 	);
 
+	// Unlock audio on first click/interaction (browser autoplay policy)
+	useEffect(() => {
+		if (audioUnlocked) return;
+		const handler = () => unlockAudio();
+		document.addEventListener("click", handler, { once: true });
+		return () => document.removeEventListener("click", handler);
+	}, [audioUnlocked, unlockAudio]);
+
 	// Hide navbar for full-screen interview experience
 	useEffect(() => {
 		setShowNavbar(false);
 		return () => setShowNavbar(true);
 	}, [setShowNavbar]);
 
+	// Release camera/mic hardware when interview ends
+	useEffect(() => {
+		if (phase === "ending" || phase === "completed" || phase === "error") {
+			stopAllTracks();
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [phase]);
+
 	// ── Disconnect handler ──────────────────────────────────────────
 	const handleDisconnectConfirm = () => {
 		setIsDisconnectOpen(false);
 		stopStreaming();
+		stopAllTracks();
 		endInterview();
 	};
 
@@ -238,83 +260,24 @@ export default function LiveInterview() {
 	}
 
 	if (phase === "completed") {
-		return (
+		return report ? (
+			<div className="min-h-screen bg-slate-50 overflow-y-auto">
+				<InterviewReport
+					report={report as unknown as InterviewReportData}
+					title="Interview Report"
+					showHomeButton
+					onFinish={handleFinish}
+					onRetry={() => router.push("/interview/new")}
+				/>
+			</div>
+		) : (
 			<div className="flex flex-col items-center justify-center h-screen bg-slate-50">
-				<div className="flex flex-col items-center gap-5 max-w-lg text-center px-6">
-					<div className="flex items-center justify-center w-16 h-16 rounded-full bg-emerald-50 border-2 border-emerald-200">
-						<CheckCircle2 className="w-7 h-7 text-emerald-500" />
+				<div className="flex flex-col items-center gap-5 max-w-md text-center px-6">
+					<div className="flex items-center justify-center w-16 h-16 rounded-full bg-red-50 border-2 border-red-200">
+						<AlertCircle className="w-7 h-7 text-red-500" />
 					</div>
-					<div>
-						<h1 className="text-2xl font-bold text-slate-900 mb-2">
-							Interview Complete!
-						</h1>
-						<p className="text-sm text-slate-500 leading-relaxed mb-4">
-							Your evaluation report has been generated.
-						</p>
-					</div>
-
-					{report ? (
-						<div className="w-full text-left max-w-2xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 mb-4">
-							{/* Score Header */}
-							<div className="flex flex-col items-center justify-center p-6 bg-white rounded-2xl border border-slate-200 shadow-sm">
-								<p className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-2">Overall Score</p>
-								<div className="flex items-baseline gap-1">
-									<span className="text-6xl font-black text-slate-900">{(report as any).score || 0}</span>
-									<span className="text-2xl text-slate-400">/100</span>
-								</div>
-							</div>
-
-							{/* Domain Ratings */}
-							<div className="grid grid-cols-3 gap-3">
-								{Object.entries((report as any).domain_rating || {}).map(([domain, score]) => (
-									<div key={domain} className="bg-white rounded-xl p-4 border border-slate-200 text-center shadow-sm">
-										<p className="text-xs font-semibold text-slate-500 uppercase mb-1">{domain}</p>
-										<p className="text-xl font-bold text-emerald-600">{score as any}/100</p>
-									</div>
-								))}
-							</div>
-
-							{/* SWOT Analysis */}
-							<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-								<div className="bg-white rounded-xl p-4 border border-emerald-200 shadow-sm">
-									<h4 className="font-semibold text-emerald-800 mb-2 flex items-center gap-2">🟢 Key Strengths</h4>
-									<ul className="text-sm text-slate-600 space-y-1 pl-4 list-disc">
-										{((report as any).swot_analysis?.strengths || ["N/A"]).map((s: string, i: number) => <li key={i}>{s}</li>)}
-									</ul>
-								</div>
-								<div className="bg-white rounded-xl p-4 border border-rose-200 shadow-sm">
-									<h4 className="font-semibold text-rose-800 mb-2 flex items-center gap-2">🔴 Weaknesses</h4>
-									<ul className="text-sm text-slate-600 space-y-1 pl-4 list-disc">
-										{((report as any).swot_analysis?.weaknesses || ["N/A"]).map((s: string, i: number) => <li key={i}>{s}</li>)}
-									</ul>
-								</div>
-							</div>
-
-							{/* Feedback */}
-							<div className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm">
-								<h4 className="font-bold text-slate-800 mb-3">Actionable Feedback</h4>
-
-								<div className="mb-4">
-									<p className="text-sm font-semibold text-amber-600 mb-1">Key Mistakes:</p>
-									<ul className="text-sm text-slate-600 space-y-1 pl-4 list-disc">
-										{((report as any).mistakes || ["None identified."]).map((m: string, i: number) => <li key={i}>{m}</li>)}
-									</ul>
-								</div>
-
-								<div>
-									<p className="text-sm font-semibold text-blue-600 mb-1">Improvement Suggestions:</p>
-									<ul className="text-sm text-slate-600 space-y-1 pl-4 list-disc">
-										{((report as any).suggestions || ["N/A"]).map((s: string, i: number) => <li key={i}>{s}</li>)}
-									</ul>
-								</div>
-							</div>
-						</div>
-					) : (
-						<div className="w-full rounded-xl border border-slate-200 bg-white p-8 text-center text-slate-500 mb-4">
-							Failed to load report data.
-						</div>
-					)}
-
+					<h1 className="text-2xl font-bold text-slate-900">Report Unavailable</h1>
+					<p className="text-sm text-slate-500">Failed to load report data.</p>
 					<button
 						onClick={handleFinish}
 						className="rounded-xl bg-slate-900 px-6 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 transition-colors"

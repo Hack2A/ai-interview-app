@@ -118,6 +118,14 @@ export function useControlbar() {
 		setIsVideoOff((prev) => !prev);
 	};
 
+	/** Stop all media tracks and release camera/mic hardware. */
+	const stopAllTracks = () => {
+		if (stream) {
+			stream.getTracks().forEach((track) => track.stop());
+			setStream(null);
+		}
+	};
+
 	return {
 		// State
 		isMuted,
@@ -142,5 +150,6 @@ export function useControlbar() {
 		handleToggleVideo,
 		handleCameraChange,
 		handleMicChange,
+		stopAllTracks,
 	};
 }

@@ -46,9 +46,11 @@ export interface UseInterviewReturn {
 	sessionId: string | null;
 	wsConnected: boolean;         // live WS connection state for debug overlay
 	audioSentCount: number;       // how many audio blobs sent (for debug overlay)
+	audioUnlocked: boolean;       // whether audio playback has been unlocked
 	sendAnswer: (text: string) => void;
 	sendAudio: (data: Blob | ArrayBuffer) => void;
 	endInterview: () => void;
+	unlockAudio: () => void;      // call on user gesture to unlock autoplay
 }
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -87,7 +89,7 @@ function formatTimestamp(startTime: number): string {
 
 // ── Hook ─────────────────────────────────────────────────────────────────────
 
-export function useInterview(): UseInterviewReturn {
+export function useInterview(speakerDeviceId?: string): UseInterviewReturn {
 	const [phase, setPhase] = useState<InterviewPhase>("loading");
 	const [statusMessage, setStatusMessage] = useState("Initializing…");
 	const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
@@ -106,12 +108,39 @@ export function useInterview(): UseInterviewReturn {
 	const startTimeRef = useRef<number>(Date.now());
 	const streamBufferRef = useRef("");
 	const audioQueueRef = useRef<HTMLAudioElement | null>(null);
+	const [audioUnlocked, setAudioUnlocked] = useState(false);
+	const speakerIdRef = useRef(speakerDeviceId);
 
 	// Keep phase accessible in WS callbacks without stale closures
 	const phaseRef = useRef<InterviewPhase>("loading");
 	useEffect(() => {
 		phaseRef.current = phase;
 	}, [phase]);
+
+	// Keep speaker device ref in sync
+	useEffect(() => {
+		speakerIdRef.current = speakerDeviceId;
+	}, [speakerDeviceId]);
+
+	// ── Audio unlock (call on any user gesture to satisfy autoplay policy) ──
+
+	const unlockAudio = useCallback(() => {
+		if (audioUnlocked) return;
+		// Play a silent audio buffer to unlock the browser's autoplay gate
+		try {
+			const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+			const buffer = ctx.createBuffer(1, 1, 22050);
+			const source = ctx.createBufferSource();
+			source.buffer = buffer;
+			source.connect(ctx.destination);
+			source.start(0);
+			ctx.close().catch(() => {});
+			setAudioUnlocked(true);
+			console.log("🔊 Audio playback unlocked via user gesture.");
+		} catch {
+			// Silently ignore — worst case audio.play() will try anyway
+		}
+	}, [audioUnlocked]);
 
 	// ── Audio playback ─────────────────────────────────────────────────────
 
@@ -128,6 +157,17 @@ export function useInterview(): UseInterviewReturn {
 			console.log("🔊 Playing AI audio:", fullUrl);
 
 			const audio = new Audio(fullUrl);
+			audio.volume = 1.0;
+
+			// Route to the selected speaker device if supported
+			if (speakerIdRef.current && typeof (audio as any).setSinkId === "function") {
+				try {
+					await (audio as any).setSinkId(speakerIdRef.current);
+					console.log("🔊 Audio routed to device:", speakerIdRef.current);
+				} catch (err) {
+					console.warn("🔊 setSinkId failed (will use default output):", err);
+				}
+			}
 
 			audio.onplay = () => setIsAISpeaking(true);
 			audio.onended = () => setIsAISpeaking(false);
@@ -136,21 +176,39 @@ export function useInterview(): UseInterviewReturn {
 				setIsAISpeaking(false);
 			};
 
+			const doPlay = async (el: HTMLAudioElement) => {
+				try {
+					await el.play();
+				} catch (err: any) {
+					if (err?.name === "NotAllowedError") {
+						console.warn(
+							"🔊 Autoplay blocked — waiting for user interaction to resume audio.",
+						);
+						// Retry once on the next user click/tap
+						const resumeOnGesture = () => {
+							el.play().catch(console.error);
+							setAudioUnlocked(true);
+							document.removeEventListener("click", resumeOnGesture);
+							document.removeEventListener("keydown", resumeOnGesture);
+						};
+						document.addEventListener("click", resumeOnGesture, { once: true });
+						document.addEventListener("keydown", resumeOnGesture, { once: true });
+					} else {
+						console.error("🔊 Audio play failed:", err);
+						setIsAISpeaking(false);
+					}
+				}
+			};
+
 			if (audioQueueRef.current && !audioQueueRef.current.ended) {
 				// Queue after the current clip finishes
 				audioQueueRef.current.onended = () => {
 					audioQueueRef.current = audio;
-					audio.play().catch((err) => {
-						console.error("🔊 Queued audio play failed:", err);
-						setIsAISpeaking(false);
-					});
+					doPlay(audio);
 				};
 			} else {
 				audioQueueRef.current = audio;
-				audio.play().catch((err) => {
-					console.error("🔊 Audio play failed:", err);
-					setIsAISpeaking(false);
-				});
+				doPlay(audio);
 			}
 		} catch (err) {
 			console.warn("🔊 Audio playback setup failed:", err);
@@ -392,8 +450,10 @@ export function useInterview(): UseInterviewReturn {
 		sessionId,
 		wsConnected,
 		audioSentCount,
+		audioUnlocked,
 		sendAnswer,
 		sendAudio,
 		endInterview,
+		unlockAudio,
 	};
 }

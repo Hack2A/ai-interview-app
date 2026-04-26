@@ -1,15 +1,18 @@
 "use client";
 
 import { ControlBarProps } from "@/types/LiveInterviewTypes";
-import { Mic, MicOff, Camera, CameraOff, Settings, PhoneOff } from "lucide-react";
+import { Mic, MicOff, Camera, CameraOff, Settings, PhoneOff, SendHorizonal } from "lucide-react";
 
 export default function ControlBar({
     isMuted,
     isVideoOff,
+    isSpeaking,
+    isRecording,
     onToggleMute,
     onToggleVideo,
     onOpenSettings,
     onDisconnect,
+    onFinishSpeaking,
 }: ControlBarProps) {
     return (
         <div className="flex items-center justify-center gap-3 py-4 px-6">
@@ -28,11 +31,10 @@ export default function ControlBar({
                 <button
                     type="button"
                     onClick={onToggleMute}
-                    className={`flex items-center justify-center w-11 h-11 rounded-xl transition-all duration-200 active:scale-95 ${
-                        isMuted
+                    className={`flex items-center justify-center w-11 h-11 rounded-xl transition-all duration-200 active:scale-95 ${isMuted
                             ? "bg-red-50 text-red-600 hover:bg-red-100"
                             : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-                    }`}
+                        }`}
                     aria-label={isMuted ? "Unmute" : "Mute"}
                 >
                     {isMuted ? (
@@ -42,15 +44,33 @@ export default function ControlBar({
                     )}
                 </button>
 
+                {/* Finish Speaking / Manual Send */}
+                {onFinishSpeaking && isRecording && (
+                    <button
+                        type="button"
+                        onClick={onFinishSpeaking}
+                        className={`flex items-center justify-center gap-1.5 h-11 rounded-xl px-4 transition-all duration-200 active:scale-95 ${isSpeaking
+                                ? "bg-blue-600 text-white hover:bg-blue-700 shadow-md shadow-blue-200 animate-pulse"
+                                : "bg-blue-50 text-blue-600 hover:bg-blue-100"
+                            }`}
+                        aria-label="Finish speaking and send"
+                        title="Click to send your answer now"
+                    >
+                        <SendHorizonal className="w-4 h-4" />
+                        <span className="text-xs font-semibold whitespace-nowrap">
+                            {isSpeaking ? "Send Now" : "Send"}
+                        </span>
+                    </button>
+                )}
+
                 {/* Video On / Off */}
                 <button
                     type="button"
                     onClick={onToggleVideo}
-                    className={`flex items-center justify-center w-11 h-11 rounded-xl transition-all duration-200 active:scale-95 ${
-                        isVideoOff
+                    className={`flex items-center justify-center w-11 h-11 rounded-xl transition-all duration-200 active:scale-95 ${isVideoOff
                             ? "bg-red-50 text-red-600 hover:bg-red-100"
                             : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-                    }`}
+                        }`}
                     aria-label={isVideoOff ? "Turn camera on" : "Turn camera off"}
                 >
                     {isVideoOff ? (

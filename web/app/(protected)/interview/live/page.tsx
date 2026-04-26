@@ -63,11 +63,12 @@ export default function LiveInterview() {
 	} = useControlbar();
 
 	// ── Audio streaming (sends mic chunks to WS) ────────────────────
-	const { stopStreaming, isStreaming, isSpeaking } = useRealtimeStream(
+	const isUserTurn = phase === "active" && !isAITyping && !isAISpeaking;
+	const { stopStreaming, isStreaming, isSpeaking, manualSend } = useRealtimeStream(
 		// Only start streaming audio once the interview is active
 		phase === "active" ? stream : null,
 		sendAudio,
-		{ autoStart: true },
+		{ autoStart: true, enabled: isUserTurn },
 	);
 
 	// Hide navbar for full-screen interview experience
@@ -120,12 +121,12 @@ export default function LiveInterview() {
 							<div
 								key={i}
 								className={`flex items-center gap-3 rounded-lg px-4 py-2.5 text-sm transition-all ${step.done
-										? "bg-emerald-50 text-emerald-700"
-										: i === 0 && phase === "loading"
+									? "bg-emerald-50 text-emerald-700"
+									: i === 0 && phase === "loading"
+										? "bg-blue-50 text-blue-700"
+										: phase === "setting-up" && i === 1
 											? "bg-blue-50 text-blue-700"
-											: phase === "setting-up" && i === 1
-												? "bg-blue-50 text-blue-700"
-												: "bg-slate-100 text-slate-400"
+											: "bg-slate-100 text-slate-400"
 									}`}
 							>
 								{step.done ? (
@@ -350,10 +351,13 @@ export default function LiveInterview() {
 					<ControlBar
 						isMuted={isMuted}
 						isVideoOff={isVideoOff}
+						isSpeaking={isSpeaking}
+						isRecording={isStreaming}
 						onToggleMute={handleToggleMute}
 						onToggleVideo={handleToggleVideo}
 						onOpenSettings={() => setIsSettingsOpen(true)}
 						onDisconnect={() => setIsDisconnectOpen(true)}
+						onFinishSpeaking={manualSend}
 					/>
 				</div>
 

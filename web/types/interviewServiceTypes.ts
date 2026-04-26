@@ -128,6 +128,7 @@ export type WSServerMessage =
 	| WSStreamChunkMessage
 	| WSStreamEndMessage
 	| WSResponseMessage
+	| WSTranscriptMessage
 	| WSTranscriptionMessage
 	| WSReportMessage
 	| WSErrorMessage;
@@ -178,6 +179,11 @@ export interface WSStreamEndMessage {
 
 export interface WSResponseMessage {
 	type: "response";
+	text: string;
+}
+
+export interface WSTranscriptMessage {
+	type: "transcript";
 	text: string;
 }
 

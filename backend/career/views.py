@@ -142,7 +142,7 @@ class CareerActionView(APIView):
         kwargs = {k: v for k, v in request.data.items() if k != 'action'}
 
         try:
-            # Call the ML method
+            # Call the ML method (may take a while for local LLM inference)
             result = method(**kwargs)
             return Response(result, status=status.HTTP_200_OK)
         except TypeError as e:
@@ -156,3 +156,4 @@ class CareerActionView(APIView):
                 {"error": "An error occurred during execution.", "detail": str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+

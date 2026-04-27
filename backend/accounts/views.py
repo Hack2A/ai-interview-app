@@ -8,6 +8,9 @@ from rest_framework.permissions import IsAuthenticated
 from .serializers import UserSerializer
 from .models import User
 from .serializers import RegisterSerializer, LoginSerializer, UserSerializer
+import random
+from django.core.cache import cache
+from django.core.mail import send_mail
 
 def get_tokens(user):
     refresh = RefreshToken.for_user(user)
@@ -16,18 +19,60 @@ def get_tokens(user):
         "access": str(refresh.access_token),
     }
 
+def generate_otp():
+    return str(random.randint(100000, 999999))
+
 class RegisterView(APIView):
     def post(self, request):
         serializer = RegisterSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        user = serializer.save()
+        
+        email = serializer.validated_data['email']
+        otp = generate_otp()
+        
+        cache_key = f"register_{email}"
+        cache.set(cache_key, {
+            "otp": otp,
+            "user_data": request.data
+        }, timeout=300)
+        
+        send_mail(
+            "Your Registration OTP",
+            f"Your OTP code is {otp}. It is valid for 5 minutes.",
+            getattr(settings, 'DEFAULT_FROM_EMAIL', 'noreply@ai-interview-app.com'),
+            [email],
+            fail_silently=False,
+        )
 
+        return Response({
+            "message": "OTP sent to email. Please verify."
+        }, status=status.HTTP_200_OK)
+
+class VerifyRegisterView(APIView):
+    def post(self, request):
+        email = request.data.get('email')
+        otp = request.data.get('otp')
+        
+        if not email or not otp:
+            return Response({"error": "Email and OTP are required"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        cache_key = f"register_{email}"
+        cached_data = cache.get(cache_key)
+        
+        if not cached_data or str(cached_data.get("otp")) != str(otp):
+            return Response({"error": "Invalid or expired OTP"}, status=status.HTTP_400_BAD_REQUEST)
+            
+        serializer = RegisterSerializer(data=cached_data.get("user_data"))
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+        
+        cache.delete(cache_key)
+        
         return Response({
             "message": "User registered successfully",
             "user": UserSerializer(user).data,
             "tokens": get_tokens(user)
         }, status=status.HTTP_201_CREATED)
-
 
 class LoginView(APIView):
     def post(self, request):
@@ -35,11 +80,49 @@ class LoginView(APIView):
         serializer.is_valid(raise_exception=True)
         user = serializer.validated_data
 
+        email = user.email
+        otp = generate_otp()
+        
+        cache_key = f"login_{email}"
+        cache.set(cache_key, otp, timeout=300)
+        
+        send_mail(
+            "Your Login OTP",
+            f"Your OTP code is {otp}. It is valid for 5 minutes.",
+            getattr(settings, 'DEFAULT_FROM_EMAIL', 'noreply@ai-interview-app.com'),
+            [email],
+            fail_silently=False,
+        )
+
+        return Response({
+            "message": "OTP sent to email. Please verify."
+        }, status=status.HTTP_200_OK)
+
+class VerifyLoginView(APIView):
+    def post(self, request):
+        email = request.data.get('email')
+        otp = request.data.get('otp')
+        
+        if not email or not otp:
+            return Response({"error": "Email and OTP are required"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        cache_key = f"login_{email}"
+        cached_otp = cache.get(cache_key)
+        
+        if not cached_otp or str(cached_otp) != str(otp):
+            return Response({"error": "Invalid or expired OTP"}, status=status.HTTP_400_BAD_REQUEST)
+            
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+            
+        cache.delete(cache_key)
+        
         return Response({
             "user": UserSerializer(user).data,
             "tokens": get_tokens(user)
         }, status=status.HTTP_200_OK)
-
 
 class GoogleAuthView(APIView):
     def post(self, request):

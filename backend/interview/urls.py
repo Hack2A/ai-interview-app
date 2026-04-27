@@ -8,6 +8,8 @@ from .views import (
     ChatHistoryView,
     EndSessionView,
     TTSView,
+    PastInterviewsView,
+    PastInterviewDetailView,
 )
 
 urlpatterns = [
@@ -19,4 +21,6 @@ urlpatterns = [
     path('chat/', ChatView.as_view(), name='interview-chat'),
     path('chat/history/', ChatHistoryView.as_view(), name='interview-chat-history'),
     path('tts/', TTSView.as_view(), name='interview-tts'),
+    path('past/', PastInterviewsView.as_view(), name='interview-past-list'),
+    path('past/<str:session_id>/', PastInterviewDetailView.as_view(), name='interview-past-detail'),
 ]

@@ -19,6 +19,7 @@ from .serializers import (
     TTSInputSerializer,
     ChatMessageSerializer,
     InterviewSessionSerializer,
+    InterviewSessionListSerializer,
 )
 
 logger = logging.getLogger('interview')
@@ -362,3 +363,41 @@ class TTSView(APIView):
             as_attachment=True,
             filename='tts_output.wav',
         )
+
+# ── Past Interviews ──────────────────────────────────────────────
+
+class PastInterviewsView(APIView):
+    """Retrieve all past interview sessions for the logged-in user."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        sessions = InterviewSession.objects.filter(
+            user=request.user
+        ).order_by('-created_at')
+        
+        # Optionally, you can filter only completed ones:
+        # sessions = sessions.filter(status='completed')
+        
+        serializer = InterviewSessionListSerializer(sessions, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class PastInterviewDetailView(APIView):
+    """Retrieve details of a specific past interview session."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, session_id):
+        try:
+            session = InterviewSession.objects.get(
+                user=request.user, 
+                session_id=session_id
+            )
+        except InterviewSession.DoesNotExist:
+            return Response(
+                {"error": "Session not found or not owned by the user."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Use full serializer to include chat logs and evaluation report if desired
+        serializer = InterviewSessionSerializer(session)
+        return Response(serializer.data, status=status.HTTP_200_OK)

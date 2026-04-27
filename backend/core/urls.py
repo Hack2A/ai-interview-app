@@ -25,6 +25,7 @@ urlpatterns = [
     path('api/auth/', include('accounts.urls')),
     path('api/onboard/', include('onboard.urls')),
     path('api/interview/', include('interview.urls')),
+    path('api/career/', include('career.urls')),
     path('ws-test/', TemplateView.as_view(template_name='ws_test.html'), name='ws-test'),
 ]
 

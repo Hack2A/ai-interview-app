@@ -5,7 +5,8 @@ export interface InterviewSessionSummary {
     session_id: string;
     difficulty: string;
     status: string;
-    ats_combined_score: number;
+    ats_combined_score?: number | null;
+    evaluation_report?: any;
     created_at: string;
     ended_at: string;
 }

@@ -16,6 +16,14 @@ export interface GoogleLoginResponse {
 	new_user?: boolean;
 }
 
+export interface UserProfile {
+    id: number;
+    name: string;
+    username: string;
+    email: string;
+    is_onboard: boolean;
+}
+
 export const authService = {
 	// Authentication service methods will be implemented here
 	login: async (credentials: { email: string; password: string }) => {
@@ -28,6 +36,11 @@ export const authService = {
 
 	register: async (userData: { name: string; username: string; email: string; password: string }) => {
 		return apiClient.post("/auth/register/", userData);
+	},
+
+	getUserProfile: async (): Promise<UserProfile> => {
+		const response = await apiClient.get("/auth/profile/");
+		return response.data;
 	},
 
 	verifyRegister: async (data: { email: string; otp: string }) => {

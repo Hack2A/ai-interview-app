@@ -2,12 +2,11 @@
 
 import {
     CircleUserRound, User, Settings, HelpCircle, FileText, LogOut, Bell,
-    ChevronDown, Mic, BrainCircuit, FileSearch, BookOpen, Route, Users,
-    Volume2, FileCode, Sparkles, FolderGit2, Github, Medal, ClipboardList,
-    ScanEye, ShieldAlert
+    ChevronDown, Mic, ClipboardList,
 } from "lucide-react";
 import Link from "next/link";
 import { useState, useEffect, useRef } from "react";
+import { CAREER_OPTIONS, CAREER_ICONS, toSlug } from "@/lib/careerConfig";
 
 const INTERVIEW_ITEMS = [
     { icon: Mic, label: "New Interview", href: "/interview/new", desc: "Start a new AI-powered mock interview" },
@@ -15,22 +14,12 @@ const INTERVIEW_ITEMS = [
     { icon: ClipboardList, label: "My Reports", href: "/reports", desc: "Detailed performance reports" },
 ];
 
-const CAREER_ITEMS = [
-    { icon: FileSearch, label: "Match Report", href: "/career/match-report", desc: "Compare your profile to job postings" },
-    { icon: FileCode, label: "Cover Letter Generator", href: "/career/cover-letter", desc: "AI-crafted cover letters" },
-    { icon: BrainCircuit, label: "Skill Gap Analysis", href: "/career/skill-gap", desc: "Identify areas to improve" },
-    { icon: Route, label: "Learning Roadmap Builder", href: "/career/roadmap", desc: "Personalized learning paths" },
-    { icon: Users, label: "Recruiter Simulator", href: "/career/recruiter-sim", desc: "Practice with simulated recruiters" },
-    { icon: Volume2, label: "Industry Tone Calibrator", href: "/career/tone-calibrator", desc: "Match your tone to the industry" },
-    { icon: ScanEye, label: "Resume Parser", href: "/career/resume-parser", desc: "Parse and analyze your resume" },
-    { icon: Sparkles, label: "Smart Resume Selector", href: "/career/smart-resume", desc: "Tailored LaTeX resume generation" },
-    { icon: BookOpen, label: "Project Extraction", href: "/career/project-extract", desc: "Extract projects from raw text" },
-    { icon: Github, label: "GitHub Repo Extraction", href: "/career/github-extract", desc: "Pull projects from GitHub repos" },
-    { icon: Medal, label: "Project Ranking", href: "/career/project-ranking", desc: "Rank your projects against JDs" },
-    { icon: FolderGit2, label: "JD Manager", href: "/career/jd-manager", desc: "Manage job descriptions" },
-    { icon: ScanEye, label: "AI Tone Detector", href: "/career/tone-detector", desc: "Analyze tone in your writing" },
-    { icon: ShieldAlert, label: "Bias & Redundancy Detector", href: "/career/bias-detector", desc: "Spot bias and redundancy" },
-];
+const CAREER_ITEMS = CAREER_OPTIONS.map((opt) => ({
+    icon: CAREER_ICONS[opt.id],
+    label: opt.title,
+    href: `/career/${toSlug(opt.id)}`,
+    desc: opt.description,
+}));
 
 const PROFILE_ITEMS = [
     { icon: User, label: "Profile", href: "/profile" },

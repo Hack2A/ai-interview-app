@@ -1,7 +1,7 @@
-from django.urls import path
+from django.urls import re_path
 from .views import CareerActionView, CareerOptionsView
 
 urlpatterns = [
-    path('options/', CareerOptionsView.as_view(), name='career-options'),
-    path('action/', CareerActionView.as_view(), name='career-action'),
+    re_path(r'^options/?$', CareerOptionsView.as_view(), name='career-options'),
+    re_path(r'^action/?$', CareerActionView.as_view(), name='career-action'),
 ]

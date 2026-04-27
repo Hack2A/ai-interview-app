@@ -83,6 +83,7 @@ class InterviewSessionListSerializer(serializers.ModelSerializer):
             'id', 'session_id', 'difficulty', 'status',
             'enable_proctoring',
             'ats_algorithmic_score', 'ats_llm_score', 'ats_combined_score',
+            'evaluation_report',
             'ended_at', 'created_at'
         ]
         read_only_fields = fields

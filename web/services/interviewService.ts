@@ -262,6 +262,11 @@ export class InterviewWebSocket {
 		this.ws.send(audioData);
 	}
 
+	/** Tell backend the audio stream chunking is finished so it can transcribe. */
+	sendAudioEnd() {
+		this._send({ type: "audio_end" });
+	}
+
 	/** End the interview and request the evaluation report. */
 	sendEnd() {
 		this._send({ type: "end" });

@@ -24,8 +24,8 @@ def get_orchestrator():
     global _orchestrator
     if _orchestrator is None:
         _ensure_ml_path()
-        from orchestrator import BeaverAIOrchestrator
-        _orchestrator = BeaverAIOrchestrator(lazy_load=True)
+        from orchestrator import IntrvAIOrchestrator
+        _orchestrator = IntrvAIOrchestrator(lazy_load=True)
     return _orchestrator
 
 

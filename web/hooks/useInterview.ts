@@ -44,6 +44,7 @@ export interface UseInterviewReturn {
 	sessionId: string | null;
 	sendAnswer: (text: string) => void;
 	sendAudio: (data: Blob | ArrayBuffer) => void;
+	sendAudioEnd: () => void;
 	endInterview: () => void;
 }
 
@@ -311,6 +312,11 @@ export function useInterview(): UseInterviewReturn {
 		wsRef.current.sendAudio(data);
 	}, []);
 
+	const sendAudioEnd = useCallback(() => {
+		if (!wsRef.current?.isConnected) return;
+		wsRef.current.sendAudioEnd();
+	}, []);
+
 	const endInterview = useCallback(() => {
 		if (!wsRef.current?.isConnected) return;
 		setPhase("ending");
@@ -329,6 +335,7 @@ export function useInterview(): UseInterviewReturn {
 		sessionId,
 		sendAnswer,
 		sendAudio,
+		sendAudioEnd,
 		endInterview,
 	};
 }

@@ -13,7 +13,7 @@ EVAL_TEMPERATURE = 0.1
 class Evaluator:
     """Generates post-interview evaluation reports using the LLM (Ollama)."""
 
-    def __init__(self, model_path: str | Path = None, llm_model: Llama | None = None) -> None:
+    def __init__(self, model_path: str | Path = None, llm_model=None) -> None:
         self.model_path = model_path
         self.llm = None
     

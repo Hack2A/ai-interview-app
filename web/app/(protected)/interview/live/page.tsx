@@ -30,6 +30,7 @@ export default function LiveInterview() {
 		error,
 		report,
 		sendAudio,
+		sendAudioEnd,
 		endInterview,
 	} = useInterview();
 
@@ -57,10 +58,13 @@ export default function LiveInterview() {
 
 	// ── Audio streaming (sends mic chunks to WS) ────────────────────
 	const { stopStreaming } = useRealtimeStream(
-		// Only start streaming audio once the interview is active
-		phase === "active" ? stream : null,
+		// Only start streaming audio once the interview is active and mic is not muted
+		phase === "active" && !isMuted ? stream : null,
 		sendAudio,
-		{ autoStart: true },
+		{
+			autoStart: true,
+			onStop: sendAudioEnd, // flushes the backend buffer for transcription
+		},
 	);
 
 	// Hide navbar for full-screen interview experience

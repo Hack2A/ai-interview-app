@@ -220,9 +220,13 @@ class PromptManager:
         if history:
             sanitized_history = []
             for msg in history[-10:]:
+                r = msg.get("role", "user")
+                c = msg.get("content", "")
+                if not c:
+                    continue
                 sanitized_msg = {
-                    "role": role,
-                    "content": content
+                    "role": r,
+                    "content": self._sanitize_text(c, max_length=2000)
                 }
                 sanitized_history.append(sanitized_msg)
             

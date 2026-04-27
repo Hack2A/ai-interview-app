@@ -57,6 +57,7 @@ class InterviewConsumer(AsyncWebsocketConsumer):
         self._interview_active = False
         self._difficulty = 'Medium'
         self._proctoring_enabled = False
+        self._audio_buffer = bytearray()
 
    
 
@@ -86,7 +87,7 @@ class InterviewConsumer(AsyncWebsocketConsumer):
         """Route incoming messages to appropriate handlers."""
          
         if bytes_data:
-            await self._handle_audio(bytes_data)
+            self._audio_buffer.extend(bytes_data)
             return
 
         
@@ -106,6 +107,7 @@ class InterviewConsumer(AsyncWebsocketConsumer):
                 'setup': self._handle_setup,
                 'start': self._handle_setup,  
                 'answer': self._handle_answer,
+                'audio_end': self._handle_audio_flush,
                 'end': self._handle_end,
             }
 
@@ -371,8 +373,13 @@ class InterviewConsumer(AsyncWebsocketConsumer):
 
     # ── Audio: STT → Answer ───────────────────────────────────────
 
-    async def _handle_audio(self, audio_data: bytes):
-        """Transcribe binary audio and treat as answer."""
+    async def _handle_audio_flush(self, data: dict):
+        """Flush the accumulated audio buffer and transcribe it.
+        
+        Called when frontend sends {"type": "audio_end"} after
+        MediaRecorder.stop(). At that point _audio_buffer holds the
+        complete WebM stream (with header from chunk 0 + all data).
+        """
         if not self._interview_active or not self.api:
             await self.send_json({
                 'type': 'error',
@@ -380,32 +387,42 @@ class InterviewConsumer(AsyncWebsocketConsumer):
             })
             return
 
+        audio_bytes = bytes(self._audio_buffer)
+        self._audio_buffer.clear()
+
+        if not audio_bytes:
+            await self.send_json({
+                'type': 'error',
+                'message': 'No audio received.',
+            })
+            return
+
+        await self._transcribe_and_answer(audio_bytes)
+
+    async def _transcribe_and_answer(self, audio_bytes: bytes):
+        """Write complete audio bytes to disk, transcribe, and send as answer."""
         await self.send_json({
             'type': 'status',
             'message': 'Transcribing audio...',
         })
 
+        audio_path = None
         try:
             with tempfile.NamedTemporaryFile(
                 delete=False, suffix='.webm'
             ) as tmp:
-                tmp.write(audio_data)
+                tmp.write(audio_bytes)
                 audio_path = tmp.name
 
             result = await asyncio.to_thread(
                 self.api.transcribe_audio, audio_path
             )
 
-            try:
-                os.unlink(audio_path)
-            except OSError:
-                pass
-
             transcribed_text = result.get('text', '').strip()
             if not transcribed_text:
                 await self.send_json({
-                    'type': 'error',
-                    'message': 'Could not transcribe audio.',
+                    'type': 'status',
+                    'message': 'Could not transcribe audio — please type your answer.',
                 })
                 return
 
@@ -425,6 +442,12 @@ class InterviewConsumer(AsyncWebsocketConsumer):
                 'type': 'error',
                 'message': f'Transcription failed: {str(e)}',
             })
+        finally:
+            if audio_path:
+                try:
+                    os.unlink(audio_path)
+                except OSError:
+                    pass
 
     # ── End: Report + Cleanup ─────────────────────────────────────
 

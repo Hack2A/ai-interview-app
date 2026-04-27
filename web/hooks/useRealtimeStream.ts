@@ -3,6 +3,8 @@ import { useEffect, useRef, useState } from "react";
 interface UseRealtimeStreamOptions {
 	/** When true, streaming starts automatically once the stream is available */
 	autoStart?: boolean;
+	/** Callback fired when the stream is stopped / finished, useful for flushing backend buffers. */
+	onStop?: () => void;
 }
 
 /**
@@ -17,7 +19,7 @@ export function useRealtimeStream(
 	sendAudio: (data: Blob) => void,
 	options: UseRealtimeStreamOptions = {},
 ) {
-	const { autoStart = false } = options;
+	const { autoStart = false, onStop } = options;
 
 	const mediaRecorderRef = useRef<MediaRecorder | null>(null);
 	const isStreamingRef = useRef(false);
@@ -34,9 +36,14 @@ export function useRealtimeStream(
 		sendAudioRef.current = sendAudio;
 	}, [sendAudio]);
 
-	// Auto-start when stream becomes available
+	// Auto-start or stop when stream becomes available/unavailable
 	useEffect(() => {
-		if (!stream) return;
+		if (!stream) {
+			if (isStreamingRef.current) {
+				stopStreaming();
+			}
+			return;
+		}
 
 		if (autoStart && !isStreamingRef.current) {
 			startStreaming();
@@ -69,6 +76,9 @@ export function useRealtimeStream(
 
 			recorder.onstop = () => {
 				console.log("🎙️ Recorder stopped");
+				if (onStop) {
+					onStop();
+				}
 			};
 
 			recorder.start(250); // chunk every 250ms

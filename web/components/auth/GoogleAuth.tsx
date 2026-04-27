@@ -16,7 +16,7 @@ interface GoogleAuthProps {
 export default function GoogleAuth({
 	onSuccess,
 	onError,
-	redirectPath = "/dashboard",
+	redirectPath = "/home",
 	buttonText = "signin_with",
 	clientId = "185103870142-n0vur7j8hn6bq8m8hpdp9kgo7ao6o07i.apps.googleusercontent.com",
 }: GoogleAuthProps) {
@@ -35,8 +35,11 @@ export default function GoogleAuth({
 				console.log("Google login response:", response);
 
 				// Check if login was successful
-				if (response.status === "success") {
-					// Token is already saved by authService.googleLogin
+				if (response && response.tokens && response.tokens.access) {
+					// Token is already saved by authService.googleLogin in localStorage,
+					// let's also save it in cookie for Next.js middleware
+					document.cookie = `token=${response.tokens.access}; path=/; max-age=${60 * 60 * 24 * 7}`; // 7 days
+					
 					console.log("Login successful, token saved");
 
 					// Call the onSuccess callback if provided
@@ -47,7 +50,7 @@ export default function GoogleAuth({
 						navigate(redirectPath, true);
 					}
 				} else {
-					const errorMsg = "Login failed. Please try again.";
+					const errorMsg = "Login failed. No token received.";
 					setError(errorMsg);
 					if (onError) {
 						onError(new Error(errorMsg));
@@ -56,7 +59,7 @@ export default function GoogleAuth({
 			} catch (error: any) {
 				console.error("Google login error:", error);
 				const errorMsg =
-					error.message || "Google login failed. Please try again.";
+					error.response?.data?.error || error.message || "Google login failed. Please try again.";
 				setError(errorMsg);
 
 				if (onError) {
@@ -97,12 +100,12 @@ export default function GoogleAuth({
 
 					{/* Error Message */}
 					{error && (
-						<p className="text-sm text-red-500 text-center">{error}</p>
+						<p className="mt-2 text-sm text-red-500 text-center">{error}</p>
 					)}
 
 					{/* Loading State */}
 					{isLoading && (
-						<p className="text-sm text-gray-600 text-center">
+						<p className="mt-2 text-sm text-gray-600 text-center">
 							Signing in...
 						</p>
 					)}

@@ -36,13 +36,12 @@ class Evaluator:
                 "score": 0,
                 "mistakes": ["Interview was terminated too early."],
                 "suggestions": ["Please complete a full session for analysis."],
-                "domain_rating": {"hr": -1, "technical": -1, "communication": -1},
+                "domain_rating": {"HR": -1, "Technical": -1, "Communication": -1},
                 "swot_analysis": {
                     "strengths": ["Insufficient data"],
-                    "weaknesses": ["Interview incomplete"],
-                    "opportunities": ["Complete full interview for detailed analysis"],
-                    "threats": ["Unable to assess"]
-                }
+                    "weaknesses": ["Interview incomplete"]
+                },
+                "ai_insight": "The interview was terminated too early to provide meaningful insights."
             }
 
         self._ensure_llm_loaded()
@@ -60,13 +59,12 @@ class Evaluator:
             '  "score": (int 0-100, be harsh),\n'
             '  "mistakes": [list of specific errors],\n'
             '  "suggestions": [list of actionable advice],\n'
-            '  "domain_rating": {"hr": int, "technical": int, "communication": int},\n'
+            '  "domain_rating": {"HR": int, "Technical": int, "Communication": int},\n'
             '  "swot_analysis": {\n'
             '    "strengths": [list of 3-5 key strengths],\n'
-            '    "weaknesses": [list of 3-5 weaknesses],\n'
-            '    "opportunities": [list of 3-5 growth opportunities],\n'
-            '    "threats": [list of 3-5 potential concerns]\n'
-            '  }\n'
+            '    "weaknesses": [list of 3-5 weaknesses]\n'
+            '  },\n'
+            '  "ai_insight": "A personalized 1-2 sentence insightful quote summarizing their performance"\n'
             "}"
         )
 
@@ -98,9 +96,9 @@ class Evaluator:
                 "score": 0,
                 "mistakes": ["Evaluation system parsing error"],
                 "suggestions": ["Please review transcripts manually"],
-                "domain_rating": {"hr": 0, "technical": 0, "communication": 0},
+                "domain_rating": {"HR": 0, "Technical": 0, "Communication": 0},
                 "swot_analysis": {
-                    "strengths": ["N/A"], "weaknesses": ["N/A"],
-                    "opportunities": ["N/A"], "threats": ["N/A"]
-                }
+                    "strengths": ["N/A"], "weaknesses": ["N/A"]
+                },
+                "ai_insight": "Could not generate insights due to a system error."
             }

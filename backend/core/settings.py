@@ -25,6 +25,7 @@ INSTALLED_APPS = [
     'accounts',
     'onboard',
     'interview',
+    'career',
     'corsheaders',
 ]
 MIDDLEWARE = [

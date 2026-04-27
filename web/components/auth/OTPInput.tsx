@@ -104,10 +104,10 @@ export default function OTPInput({
             {showToast && <Toast message="OTP verified successfully!" type="success" />}
 
             <div className="mb-8 text-center">
-                <h2 className="text-3xl font-bold text-[#F1F5F9] mb-2">
+                <h2 className="text-3xl font-bold text-[#1E293B] mb-2">
                     {isVerified ? "Verification Complete" : "Verify OTP"}
                 </h2>
-                <p className="text-[#94A3B8]">
+                <p className="text-[#475569]">
                     {isVerified
                         ? "Your OTP has been verified successfully"
                         : "Enter the 6-digit code sent to your email"}
@@ -129,33 +129,33 @@ export default function OTPInput({
                         onKeyDown={(e) => handleKeyDown(index, e)}
                         onPaste={handlePaste}
                         disabled={isLoading}
-                        className="w-12 h-14 text-center text-2xl font-bold bg-[#1E293B] border border-[#7C3AED]/30 rounded-xl text-[#F1F5F9] focus:outline-none focus:ring-2 focus:ring-[#7C3AED] focus:border-transparent transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="w-12 h-14 text-center text-2xl font-bold bg-white border border-[#E2E8F0] rounded-xl text-[#1E293B] focus:outline-none focus:ring-2 focus:ring-[#2563EB] focus:border-transparent transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                         autoComplete="off"
                     />
                 ))}
             </div>
 
             {error && (
-                <p className="mb-4 text-sm text-red-400 text-center">{error}</p>
+                <p className="mb-4 text-sm text-red-500 text-center">{error}</p>
             )}
 
             <div className="space-y-3">
                 {isVerified && !hasSeedPhrase ? (
                     <button
                         onClick={onContinue}
-                        className="w-full py-3 px-4 bg-linear-to-r from-[#10B981] to-[#059669] text-white font-semibold rounded-xl shadow-lg shadow-[#10B981]/30 hover:shadow-[#10B981]/50 hover:scale-[1.02] transition-all focus:outline-none focus:ring-2 focus:ring-[#10B981]/50 cursor-pointer"
+                        className="w-full py-3 px-4 bg-gradient-to-r from-[#3B82F6] to-[#2563EB] text-white font-semibold rounded-xl shadow-lg shadow-blue-500/30 hover:shadow-blue-500/50 hover:scale-[1.02] transition-all focus:outline-none focus:ring-2 focus:ring-[#2563EB]/50 cursor-pointer"
                     >
                         Continue
                     </button>
                 ) : isVerified && hasSeedPhrase ? (
-                    <div className="text-center py-3 text-[#94A3B8]">
+                    <div className="text-center py-3 text-[#475569]">
                         Please save your recovery phrase to continue
                     </div>
                 ) : (
                     <button
                         onClick={() => onComplete(otp.join(""))}
                         disabled={otp.some(digit => digit === "") || isLoading}
-                        className="w-full py-3 px-4 bg-linear-to-r from-[#5B21B6] to-[#7C3AED] text-white font-semibold rounded-xl shadow-lg shadow-[#7C3AED]/30 hover:shadow-[#7C3AED]/50 hover:scale-[1.02] transition-all focus:outline-none focus:ring-2 focus:ring-[#7C3AED]/50 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 cursor-pointer"
+                        className="w-full py-3 px-4 bg-gradient-to-r from-[#3B82F6] to-[#2563EB] text-white font-semibold rounded-xl shadow-lg shadow-blue-500/30 hover:shadow-blue-500/50 hover:scale-[1.02] transition-all focus:outline-none focus:ring-2 focus:ring-[#2563EB]/50 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 cursor-pointer"
                     >
                         {isLoading ? "Verifying..." : "Verify OTP"}
                     </button>
@@ -166,7 +166,7 @@ export default function OTPInput({
                         <button
                             onClick={handleReset}
                             disabled={isLoading}
-                            className="flex-1 py-2 px-4 bg-[#1E293B] border border-[#7C3AED]/30 text-[#F1F5F9] font-medium rounded-xl hover:bg-[#1E293B]/80 transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                            className="flex-1 py-2 px-4 bg-white border border-[#E2E8F0] text-[#1E293B] font-medium rounded-xl hover:bg-gray-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                         >
                             Clear
                         </button>
@@ -175,7 +175,7 @@ export default function OTPInput({
                             <button
                                 onClick={onCancel}
                                 disabled={isLoading}
-                                className="flex-1 py-2 px-4 bg-[#1E293B] border border-[#7C3AED]/30 text-[#F1F5F9] font-medium rounded-xl hover:bg-[#1E293B]/80 transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                                className="flex-1 py-2 px-4 bg-white border border-[#E2E8F0] text-[#1E293B] font-medium rounded-xl hover:bg-gray-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                             >
                                 Cancel
                             </button>
@@ -185,12 +185,12 @@ export default function OTPInput({
             </div>
 
             {!isVerified && (
-                <p className="mt-5 text-center text-[#94A3B8]">
+                <p className="mt-5 text-center text-[#475569]">
                     Didn't receive the code?{" "}
                     <button
                         onClick={handleReset}
                         disabled={isLoading}
-                        className="text-[#10B981] hover:text-[#10B981]/80 font-semibold transition-colors cursor-pointer disabled:opacity-50"
+                        className="text-[#2563EB] hover:text-[#2563EB]/80 font-semibold transition-colors cursor-pointer disabled:opacity-50"
                     >
                         Resend OTP
                     </button>

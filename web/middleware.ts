@@ -2,7 +2,17 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 // Define all protected routes here - easier to maintain
-const PROTECTED_ROUTES = [" "];
+const PROTECTED_ROUTES = [
+	"/home",
+	"/profile",
+	"/dashboard",
+	"/settings",
+	"/reports",
+	"/support",
+	"/notifications",
+	"/career",
+	"/interview",
+];
 
 export function middleware(req: NextRequest) {
 	const token = req.cookies.get("token");
@@ -30,10 +40,13 @@ export function middleware(req: NextRequest) {
 
 export const config = {
 	matcher: [
-		"/home/:path*",
-		"/profile/:path*",
-		"/dashboard/:path*",
-		"/login",
-		"/register",
+		/*
+		 * Match all request paths except for the ones starting with:
+		 * - api (API routes)
+		 * - _next/static (static files)
+		 * - _next/image (image optimization files)
+		 * - favicon.ico (favicon file)
+		 */
+		'/((?!api|_next/static|_next/image|favicon.ico).*)',
 	],
 };

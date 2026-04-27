@@ -5,7 +5,6 @@ import { authService } from "@/services/authService";
 import { useForm } from "react-hook-form";
 import { useState } from "react";
 import { useSearchParams } from "next/navigation";
-import GoogleAuth from "./GoogleAuth";
 import OTPInput from "./OTPInput";
 
 type LoginFormData = {
@@ -19,8 +18,8 @@ export default function LoginForm() {
 
     const [showOTP, setShowOTP] = useState(false);
     const [userEmail, setUserEmail] = useState("");
-    const [sessionToken, setSessionToken] = useState("");
     const [isLoading, setIsLoading] = useState(false);
+    const [loginError, setLoginError] = useState("");
     const [otpError, setOtpError] = useState("");
     const [isVerified, setIsVerified] = useState(false);
     const [showToast, setShowToast] = useState(false);
@@ -35,17 +34,14 @@ export default function LoginForm() {
     const onSubmit = async (data: LoginFormData) => {
         try {
             setIsLoading(true);
-            setOtpError("");
+            setLoginError("");
             const response = await authService.login(data);
 
-            // After successful login request, show OTP input
-            if (response.data.session_token) {
-                setSessionToken(response.data.session_token);
-            }
+            // After successful login request, backend sends OTP
             setUserEmail(data.email);
             setShowOTP(true);
         } catch (error: any) {
-            setOtpError(error.response?.data?.message || "Login failed. Please try again.");
+            setLoginError(error.response?.data?.error || error.response?.data?.detail || "Login failed. Please try again.");
         } finally {
             setIsLoading(false);
         }
@@ -56,31 +52,29 @@ export default function LoginForm() {
             setIsLoading(true);
             setOtpError("");
 
-            const response = await authService.verifyOTP({
+            const response = await authService.verifyLogin({
                 email: userEmail,
                 otp: otp,
-                session_token: sessionToken,
             });
 
-            if (response.data.access) {
-                // Store verified data but don't redirect yet
+            if (response.data?.tokens?.access) {
                 setVerifiedData(response.data);
                 setIsVerified(true);
                 setShowToast(true);
-                // Hide toast after 5 seconds
                 setTimeout(() => setShowToast(false), 5000);
+            } else {
+                setOtpError("OTP verification failed. No token received.");
             }
         } catch (error: any) {
-            setOtpError(error.response?.data?.message || "Invalid OTP. Please try again.");
+            setOtpError(error.response?.data?.error || error.response?.data?.detail || "Invalid OTP. Please try again.");
         } finally {
             setIsLoading(false);
         }
     };
 
     const handleContinue = () => {
-        if (verifiedData && verifiedData.access) {
-            // Set token as cookie for authentication
-            document.cookie = `token=${verifiedData.access}; path=/; max-age=${60 * 60 * 24 * 7}`; // 7 days
+        if (verifiedData?.tokens?.access) {
+            document.cookie = `token=${verifiedData.tokens.access}; path=/; max-age=${60 * 60 * 24 * 7}`; // 7 days
             navigate(redirect, true);
         }
     };
@@ -88,14 +82,12 @@ export default function LoginForm() {
     const handleCancelOTP = () => {
         setShowOTP(false);
         setUserEmail("");
-        setSessionToken("");
         setOtpError("");
         setIsVerified(false);
         setShowToast(false);
         setVerifiedData(null);
     };
 
-    // Show OTP input if OTP stage is active
     if (showOTP) {
         return (
             <OTPInput
@@ -117,6 +109,12 @@ export default function LoginForm() {
                 <h2 className="text-3xl font-bold text-[#1E293B] mb-2">Sign In</h2>
                 <p className="text-[#475569]">Enter your credentials to access your account</p>
             </div>
+
+            {loginError && (
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-600 rounded-lg text-sm">
+                    {loginError}
+                </div>
+            )}
 
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
                 {/* Email Field */}

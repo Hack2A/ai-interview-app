@@ -7,6 +7,8 @@ import {
 import Link from "next/link";
 import { useState, useEffect, useRef } from "react";
 import { CAREER_OPTIONS, CAREER_ICONS, toSlug } from "@/lib/careerConfig";
+import { authService } from "@/services/authService";
+import { navigate } from "@/lib/navigation";
 
 const INTERVIEW_ITEMS = [
     { icon: Mic, label: "New Interview", href: "/interview/new", desc: "Start a new AI-powered mock interview" },
@@ -50,6 +52,18 @@ export default function ProtectedNavbar() {
         document.addEventListener("mousedown", handleClickOutside);
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
+
+    const handleLogout = async () => {
+        setProfileOpen(false);
+        try {
+            await authService.logout();
+        } catch (error) {
+            console.error("Logout failed:", error);
+        } finally {
+            document.cookie = "token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+            navigate("/login", true);
+        }
+    };
 
     return (
         <nav
@@ -161,7 +175,7 @@ export default function ProtectedNavbar() {
                     <div className="relative" ref={profileRef}>
                         <button
                             onClick={() => setProfileOpen(!profileOpen)}
-                            className="px-2.5 py-2.5 bg-linear-to-r from-[#3B82F6] to-[#2563EB] text-white font-semibold rounded-full shadow-lg shadow-blue-500/30 hover:shadow-blue-500/50 hover:scale-105 transition-all duration-300 outline-none focus:outline-none focus:ring-2 focus:ring-blue-400/50 flex items-center gap-1 cursor-pointer"
+                            className="px-2.5 py-2.5 bg-gradient-to-r from-[#3B82F6] to-[#2563EB] text-white font-semibold rounded-full shadow-lg shadow-blue-500/30 hover:shadow-blue-500/50 hover:scale-105 transition-all duration-300 outline-none focus:outline-none focus:ring-2 focus:ring-blue-400/50 flex items-center gap-1 cursor-pointer"
                         >
                             <CircleUserRound />
                         </button>
@@ -169,8 +183,8 @@ export default function ProtectedNavbar() {
                         {profileOpen && (
                             <div className="absolute right-0 mt-3 w-56 bg-white rounded-xl shadow-xl shadow-gray-200/80 border border-gray-100 py-2 z-50">
                                 <div className="px-4 py-3 border-b border-gray-100">
-                                    <p className="text-sm font-semibold text-gray-800">Username</p>
-                                    <p className="text-xs text-gray-400 mt-0.5">user@email.com</p>
+                                    <p className="text-sm font-semibold text-gray-800">Account</p>
+                                    <p className="text-xs text-gray-400 mt-0.5">Manage your profile</p>
                                 </div>
                                 <div className="py-1">
                                     {PROFILE_ITEMS.map((menuItem) => (
@@ -188,10 +202,7 @@ export default function ProtectedNavbar() {
                                 <div className="border-t border-gray-100 pt-1">
                                     <button
                                         className="flex items-center gap-3 px-4 py-2.5 text-sm text-red-500 hover:bg-red-50 transition-colors duration-150 w-full cursor-pointer"
-                                        onClick={() => {
-                                            setProfileOpen(false);
-                                            // TODO: handle logout
-                                        }}
+                                        onClick={handleLogout}
                                     >
                                         <LogOut size={16} strokeWidth={2} />
                                         Sign Out

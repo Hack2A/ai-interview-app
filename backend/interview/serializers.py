@@ -74,3 +74,15 @@ class InterviewSessionSerializer(serializers.ModelSerializer):
             'messages',
         ]
         read_only_fields = fields
+
+
+class InterviewSessionListSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = InterviewSession
+        fields = [
+            'id', 'session_id', 'difficulty', 'status',
+            'enable_proctoring',
+            'ats_algorithmic_score', 'ats_llm_score', 'ats_combined_score',
+            'ended_at', 'created_at'
+        ]
+        read_only_fields = fields

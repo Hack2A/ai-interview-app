@@ -14,3 +14,4 @@ urllib3==2.6.3
 channels>=4.0
 daphne>=4.0
 channels-redis>=4.0
+zipp>=3.19.1 # not directly required, pinned by Snyk to avoid a vulnerability

@@ -1,6 +1,5 @@
 import json
 import logging
-import sys
 import time
 import threading
 from typing import Generator

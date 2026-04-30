@@ -2,8 +2,23 @@
 
 import review from "@/components/assets/review-home.svg";
 import { navigate } from "@/lib/navigation";
+import { useEffect, useState } from "react";
+import { authService, UserProfile } from "@/services/authService";
 
 export default function GreetSection() {
+    const [user, setUser] = useState<UserProfile | null>(null);
+
+    useEffect(() => {
+        const fetchUser = async () => {
+            try {
+                const profile = await authService.getUserProfile();
+                setUser(profile);
+            } catch (error) {
+                console.error("Failed to fetch user profile:", error);
+            }
+        };
+        fetchUser();
+    }, []);
 
     const handleStartNewInterview = () => {
         navigate("/interview/new");
@@ -15,13 +30,16 @@ export default function GreetSection() {
             <div className="flex-1">
                 {/* Text Section */}
                 <div className="flex flex-col">
-                    <h1 className="text-4xl font-bold">Hey [Username]!</h1>
+                    <h1 className="text-4xl font-bold">Hey {user?.name || "there"}!</h1>
                     <h2 className="text-2xl font-bold">Let's take a quick look at your progress</h2>
-                    <span className="w-[85%] text-gray-500">Jump back into your latest interview and review your performance.See what worked, what didn't, and what to improve next.</span>
+                    <span className="w-[85%] text-gray-500 mt-2">Jump back into your latest interview and review your performance. See what worked, what didn't, and what to improve next.</span>
                 </div>
                 {/* CTA Section */}
                 <div className="flex gap-4 items-center mt-6">
-                    <button className="px-6 py-3 bg-yellow-200 text-yellow-900 rounded-lg font-semibold hover:bg-yellow-300 transition-colors duration-200 cursor-pointer">
+                    <button 
+                        onClick={() => navigate("/reports")}
+                        className="px-6 py-3 bg-yellow-200 text-yellow-900 rounded-lg font-semibold hover:bg-yellow-300 transition-colors duration-200 cursor-pointer"
+                    >
                         Last Interview Report
                     </button>
                     <span className="text-gray-400 font-medium">or</span>

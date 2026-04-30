@@ -72,6 +72,8 @@ class PromptManager:
         type_guidance = self._TYPE_QUESTION_GUIDANCE.get(interview_type, self._TYPE_QUESTION_GUIDANCE["technical"])
 
         self.system_persona = type_persona + self._COMMON_RULES + f"\nQUESTION FOCUS:\n{type_guidance}\n"
+        self.resume_context = ""
+        self.jd_context = ""
 
         if resume_text:
             sanitized_resume = self._sanitize_text(resume_text, max_length=1500)
@@ -219,8 +221,8 @@ class PromptManager:
             sanitized_history = []
             for msg in history[-10:]:
                 sanitized_msg = {
-                    "role": msg.get("role", "user"),
-                    "content": self._sanitize_text(msg.get("content", ""), max_length=5000)
+                    "role": role,
+                    "content": content
                 }
                 sanitized_history.append(sanitized_msg)
             

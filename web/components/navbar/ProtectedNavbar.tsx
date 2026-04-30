@@ -1,29 +1,78 @@
 "use client";
 
-import { CircleUserRound } from "lucide-react";
+import {
+    CircleUserRound, User, Settings, HelpCircle, FileText, LogOut, Bell,
+    ChevronDown, Mic, ClipboardList,
+} from "lucide-react";
 import Link from "next/link";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { CAREER_OPTIONS, CAREER_ICONS, toSlug } from "@/lib/careerConfig";
+import { authService } from "@/services/authService";
+import { navigate } from "@/lib/navigation";
+
+const INTERVIEW_ITEMS = [
+    { icon: Mic, label: "New Interview", href: "/interview/new", desc: "Start a new AI-powered mock interview" },
+    { icon: FileText, label: "Past Interviews", href: "/home", desc: "Review your previous sessions" },
+    { icon: ClipboardList, label: "My Reports", href: "/reports", desc: "Detailed performance reports" },
+];
+
+const CAREER_ITEMS = CAREER_OPTIONS.map((opt) => ({
+    icon: CAREER_ICONS[opt.id],
+    label: opt.title,
+    href: `/career/${toSlug(opt.id)}`,
+    desc: opt.description,
+}));
+
+const PROFILE_ITEMS = [
+    { icon: User, label: "Profile", href: "/profile" },
+    { icon: Settings, label: "Settings", href: "/settings" },
+    { icon: Bell, label: "Notifications", href: "/notifications" },
+    { icon: HelpCircle, label: "Help & Support", href: "/support" },
+];
 
 export default function ProtectedNavbar() {
     const [scrolled, setScrolled] = useState(false);
+    const [profileOpen, setProfileOpen] = useState(false);
+    const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
+    const profileRef = useRef<HTMLDivElement>(null);
+    const navRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
-        const handleScroll = () => {
-            setScrolled(window.scrollY > 20);
-        };
-
+        const handleScroll = () => setScrolled(window.scrollY > 20);
         window.addEventListener("scroll", handleScroll);
         return () => window.removeEventListener("scroll", handleScroll);
     }, []);
 
+    useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            if (profileRef.current && !profileRef.current.contains(e.target as Node)) {
+                setProfileOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
+    const handleLogout = async () => {
+        setProfileOpen(false);
+        try {
+            await authService.logout();
+        } catch (error) {
+            console.error("Logout failed:", error);
+        } finally {
+            document.cookie = "token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+            navigate("/login", true);
+        }
+    };
+
     return (
         <nav
-            className={`transition-all duration-500 ease-in-out ${scrolled
+            className={`transition-all duration-500 ease-in-out relative z-50 ${scrolled
                 ? "bg-white/95 backdrop-blur-xl border-b border-[#E2E8F0] shadow-lg shadow-blue-100/50"
                 : "bg-white border-b border-[#E2E8F0]"
                 }`}
         >
-            <div className="max-w-[90%] mx-auto px-6 py-4">
+            <div className="max-w-[90%] mx-auto px-6 py-4" ref={navRef}>
                 <div className="flex items-center justify-between">
                     {/* Logo */}
                     <Link href="/home" className="flex items-center gap-2 group outline-none focus:outline-none">
@@ -43,18 +92,124 @@ export default function ProtectedNavbar() {
                             </svg>
                         </div>
                         <span className="text-xl font-bold text-[#1E293B] group-hover:text-[#2563EB] transition-colors">
-                            BeaverAI
+                            IntrvAI
                         </span>
                     </Link>
 
-                    {/* CTA Buttons */}
-                    <div className="flex items-center gap-4">
-                        <Link
-                            href="/profile"
-                            className="px-2.5 py-2.5 bg-linear-to-r from-[#3B82F6] to-[#2563EB] text-white font-semibold rounded-full shadow-lg shadow-blue-500/30 hover:shadow-blue-500/50 hover:scale-105 transition-all duration-300 outline-none focus:outline-none focus:ring-2 focus:ring-blue-400/50 flex items-center gap-1"
+                    {/* Center Nav Items with Mega Dropdowns */}
+                    <div className="flex items-center gap-1">
+                        {/* Interview Dropdown */}
+                        <div
+                            className="relative"
+                            onMouseEnter={() => setActiveDropdown("interview")}
+                            onMouseLeave={() => setActiveDropdown(null)}
+                        >
+                            <button className="flex items-center gap-1 px-4 py-2 text-sm font-medium text-gray-600 hover:text-blue-600 transition-colors duration-200 rounded-lg hover:bg-blue-50 cursor-pointer">
+                                Interview
+                                <ChevronDown size={14} className={`transition-transform duration-200 ${activeDropdown === "interview" ? "rotate-180" : ""}`} />
+                            </button>
+
+                            {activeDropdown === "interview" && (
+                                <div className="absolute left-0 top-full pt-2 z-50">
+                                    <div className="w-80 bg-white rounded-xl shadow-xl shadow-gray-200/80 border border-gray-100 py-2">
+                                        <div className="px-4 py-2 border-b border-gray-100">
+                                            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Interview Tools</p>
+                                        </div>
+                                        {INTERVIEW_ITEMS.map((menuItem) => (
+                                            <Link
+                                                key={menuItem.label}
+                                                href={menuItem.href}
+                                                className="flex items-start gap-3 px-4 py-3 hover:bg-blue-50 transition-colors duration-150 group"
+                                            >
+                                                <menuItem.icon size={18} strokeWidth={2} className="text-gray-400 group-hover:text-blue-500 mt-0.5 shrink-0 transition-colors" />
+                                                <div>
+                                                    <p className="text-sm font-medium text-gray-700 group-hover:text-blue-600 transition-colors">{menuItem.label}</p>
+                                                    <p className="text-xs text-gray-400 mt-0.5">{menuItem.desc}</p>
+                                                </div>
+                                            </Link>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Career Management Mega Dropdown */}
+                        <div
+                            className="relative"
+                            onMouseEnter={() => setActiveDropdown("career")}
+                            onMouseLeave={() => setActiveDropdown(null)}
+                        >
+                            <button className="flex items-center gap-1 px-4 py-2 text-sm font-medium text-gray-600 hover:text-blue-600 transition-colors duration-200 rounded-lg hover:bg-blue-50 cursor-pointer">
+                                Career Management
+                                <ChevronDown size={14} className={`transition-transform duration-200 ${activeDropdown === "career" ? "rotate-180" : ""}`} />
+                            </button>
+
+                            {activeDropdown === "career" && (
+                                <div className="absolute left-1/2 -translate-x-1/2 top-full pt-2 z-50">
+                                <div className="w-[640px] bg-white rounded-xl shadow-xl shadow-gray-200/80 border border-gray-100 py-2">
+                                    <div className="px-5 py-2 border-b border-gray-100">
+                                        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Career Management Tools</p>
+                                    </div>
+                                    <div className="grid grid-cols-2 p-2">
+                                        {CAREER_ITEMS.map((menuItem) => (
+                                            <Link
+                                                key={menuItem.label}
+                                                href={menuItem.href}
+                                                className="flex items-start gap-3 px-3 py-2.5 rounded-lg hover:bg-blue-50 transition-colors duration-150 group"
+                                            >
+                                                <menuItem.icon size={16} strokeWidth={2} className="text-gray-400 group-hover:text-blue-500 mt-0.5 shrink-0 transition-colors" />
+                                                <div>
+                                                    <p className="text-sm font-medium text-gray-700 group-hover:text-blue-600 transition-colors">{menuItem.label}</p>
+                                                    <p className="text-[11px] text-gray-400 leading-tight mt-0.5">{menuItem.desc}</p>
+                                                </div>
+                                            </Link>
+                                        ))}
+                                    </div>
+                                </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Right: Profile Button + Dropdown */}
+                    <div className="relative" ref={profileRef}>
+                        <button
+                            onClick={() => setProfileOpen(!profileOpen)}
+                            className="px-2.5 py-2.5 bg-gradient-to-r from-[#3B82F6] to-[#2563EB] text-white font-semibold rounded-full shadow-lg shadow-blue-500/30 hover:shadow-blue-500/50 hover:scale-105 transition-all duration-300 outline-none focus:outline-none focus:ring-2 focus:ring-blue-400/50 flex items-center gap-1 cursor-pointer"
                         >
                             <CircleUserRound />
-                        </Link>
+                        </button>
+
+                        {profileOpen && (
+                            <div className="absolute right-0 mt-3 w-56 bg-white rounded-xl shadow-xl shadow-gray-200/80 border border-gray-100 py-2 z-50">
+                                <div className="px-4 py-3 border-b border-gray-100">
+                                    <p className="text-sm font-semibold text-gray-800">Account</p>
+                                    <p className="text-xs text-gray-400 mt-0.5">Manage your profile</p>
+                                </div>
+                                <div className="py-1">
+                                    {PROFILE_ITEMS.map((menuItem) => (
+                                        <Link
+                                            key={menuItem.label}
+                                            href={menuItem.href}
+                                            className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-600 hover:bg-blue-50 hover:text-blue-600 transition-colors duration-150"
+                                            onClick={() => setProfileOpen(false)}
+                                        >
+                                            <menuItem.icon size={16} strokeWidth={2} />
+                                            {menuItem.label}
+                                        </Link>
+                                    ))}
+                                </div>
+                                <div className="border-t border-gray-100 pt-1">
+                                    <button
+                                        className="flex items-center gap-3 px-4 py-2.5 text-sm text-red-500 hover:bg-red-50 transition-colors duration-150 w-full cursor-pointer"
+                                        onClick={handleLogout}
+                                    >
+                                        <LogOut size={16} strokeWidth={2} />
+                                        Sign Out
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>

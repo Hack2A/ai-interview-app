@@ -26,10 +26,13 @@ export interface VideoAreaProps {
 export type ControlBarProps = {
     isMuted: boolean;
     isVideoOff: boolean;
+    isSpeaking?: boolean;
+    isRecording?: boolean;
     onToggleMute: () => void;
     onToggleVideo: () => void;
     onOpenSettings: () => void;
     onDisconnect: () => void;
+    onFinishSpeaking?: () => void;
 };
 
 export type SettingsModalProps = {

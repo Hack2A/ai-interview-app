@@ -3,13 +3,13 @@
 import { useForm } from "react-hook-form";
 import { useState } from "react";
 import { useSearchParams } from "next/navigation";
-import GoogleAuth from "./GoogleAuth";
-import OTPInput from "./OTPInput";
 import { navigate } from "@/lib/navigation";
 import { authService } from "@/services/authService";
 import SeedPopup from "../popup/seed";
+import OTPInput from "./OTPInput";
 
 type RegisterFormData = {
+    name: string;
     email: string;
     username: string;
     password: string;
@@ -22,8 +22,8 @@ export default function RegisterForm() {
 
     const [showOTP, setShowOTP] = useState(false);
     const [userEmail, setUserEmail] = useState("");
-    const [sessionToken, setSessionToken] = useState("");
     const [isLoading, setIsLoading] = useState(false);
+    const [regError, setRegError] = useState("");
     const [otpError, setOtpError] = useState("");
     const [isVerified, setIsVerified] = useState(false);
     const [showToast, setShowToast] = useState(false);
@@ -42,17 +42,14 @@ export default function RegisterForm() {
     const onSubmit = async (data: RegisterFormData) => {
         try {
             setIsLoading(true);
-            setOtpError("");
+            setRegError("");
             const response = await authService.register(data);
 
-            // After successful registration request, show OTP input
-            if (response.data.session_token) {
-                setSessionToken(response.data.session_token);
-            }
+            // After successful registration request, backend sends OTP
             setUserEmail(data.email);
             setShowOTP(true);
         } catch (error: any) {
-            setOtpError(error.response?.data?.message || "Registration failed. Please try again.");
+            setRegError(error.response?.data?.error || error.response?.data?.detail || "Registration failed. Please try again.");
         } finally {
             setIsLoading(false);
         }
@@ -63,35 +60,32 @@ export default function RegisterForm() {
             setIsLoading(true);
             setOtpError("");
 
-            const response = await authService.verifyOTP({
+            const response = await authService.verifyRegister({
                 email: userEmail,
                 otp: otp,
-                session_token: sessionToken,
             });
 
-            if (response.data.access) {
-                // Store verified data but don't redirect yet
+            if (response.data?.tokens?.access) {
                 setVerifiedData(response.data);
                 setIsVerified(true);
                 setShowToast(true);
-                // Hide toast after 5 seconds
                 setTimeout(() => setShowToast(false), 5000);
+            } else {
+                setOtpError("OTP verification failed. No token received.");
             }
         } catch (error: any) {
-            setOtpError(error.response?.data?.message || "Invalid OTP. Please try again.");
+            setOtpError(error.response?.data?.error || error.response?.data?.detail || "Invalid OTP. Please try again.");
         } finally {
             setIsLoading(false);
         }
     };
 
     const handleContinue = () => {
-        if (verifiedData && verifiedData.access) {
-            // If there's a seed phrase, show the popup first
+        if (verifiedData?.tokens?.access) {
             if (verifiedData.seed_phrase && verifiedData.seed_phrase.length > 0) {
                 setShowSeedPopup(true);
             } else {
-                // No seed phrase, proceed directly
-                document.cookie = `token=${verifiedData.access}; path=/; max-age=${60 * 60 * 24 * 7}`; // 7 days
+                document.cookie = `token=${verifiedData.tokens.access}; path=/; max-age=${60 * 60 * 24 * 7}`; // 7 days
                 navigate(redirect, true);
             }
         }
@@ -99,9 +93,9 @@ export default function RegisterForm() {
 
     const handleSeedPopupClose = () => {
         setShowSeedPopup(false);
-        if (verifiedData && verifiedData.access) {
-            // Set token as cookie for authentication
-            document.cookie = `token=${verifiedData.access}; path=/; max-age=${60 * 60 * 24 * 7}`; // 7 days
+        const token = verifiedData?.tokens?.access;
+        if (token) {
+            document.cookie = `token=${token}; path=/; max-age=${60 * 60 * 24 * 7}`; // 7 days
             navigate(redirect, true);
         }
     };
@@ -109,14 +103,12 @@ export default function RegisterForm() {
     const handleCancelOTP = () => {
         setShowOTP(false);
         setUserEmail("");
-        setSessionToken("");
         setOtpError("");
         setIsVerified(false);
         setShowToast(false);
         setVerifiedData(null);
     };
 
-    // Show OTP input if OTP stage is active
     if (showOTP) {
         return (
             <>
@@ -145,10 +137,38 @@ export default function RegisterForm() {
         <div className="w-full max-w-md h-full flex flex-col justify-center">
             <div className="mb-8">
                 <h2 className="text-3xl font-bold text-[#1E293B] mb-2">Create Account</h2>
-                <p className="text-[#475569]">Get started with BeaverAI interview prep</p>
+                <p className="text-[#475569]">Get started with IntrvAI interview prep</p>
             </div>
 
+            {regError && (
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-600 rounded-lg text-sm">
+                    {regError}
+                </div>
+            )}
+
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-3">
+                {/* Name Field */}
+                <div>
+                    <label
+                        htmlFor="name"
+                        className="block text-sm font-medium text-[#1E293B] mb-2"
+                    >
+                        Full Name
+                    </label>
+                    <input
+                        id="name"
+                        type="text"
+                        {...register("name", {
+                            required: "Full Name is required",
+                        })}
+                        className="w-full px-4 py-3 bg-white border border-[#E2E8F0] rounded-xl text-[#1E293B] placeholder-[#94A3B8] focus:outline-none focus:ring-2 focus:ring-[#2563EB] focus:border-transparent transition-all"
+                        placeholder="Enter your full name"
+                    />
+                    {errors.name && (
+                        <p className="mt-2 text-sm text-red-400">{errors.name.message}</p>
+                    )}
+                </div>
+
                 {/* Email Field */}
                 <div>
                     <label

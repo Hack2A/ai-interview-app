@@ -28,7 +28,7 @@ export default function Hero() {
                         </h1>
 
                         <p className="text-xl text-[#475569] leading-relaxed max-w-xl">
-                            BeaverAI helps you master interview skills with AI-powered practice sessions.
+                            IntrvAI helps you master interview skills with AI-powered practice sessions.
                             Upload your resume, get ATS scores, and practice with realistic AI interviews tailored to your needs.
                         </p>
 

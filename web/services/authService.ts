@@ -7,10 +7,21 @@ export interface GoogleCredentialResponse {
 }
 
 export interface GoogleLoginResponse {
-	message: string;
-	status: string;
-	token: string;
-	id: string;
+	message?: string;
+	user: any;
+	tokens: {
+		access: string;
+		refresh: string;
+	};
+	new_user?: boolean;
+}
+
+export interface UserProfile {
+    id: number;
+    name: string;
+    username: string;
+    email: string;
+    is_onboard: boolean;
 }
 
 export const authService = {
@@ -19,16 +30,21 @@ export const authService = {
 		return apiClient.post("/auth/login/", credentials);
 	},
 
-	register: async (userData: { email: string; password: string }) => {
+	verifyLogin: async (data: { email: string; otp: string }) => {
+		return apiClient.post("/auth/verify-login/", data);
+	},
+
+	register: async (userData: { name: string; username: string; email: string; password: string }) => {
 		return apiClient.post("/auth/register/", userData);
 	},
 
-	verifyOTP: async (otpData: {
-		email: string;
-		otp: string;
-		session_token: string;
-	}) => {
-		return apiClient.post("/auth/verify-otp/", otpData);
+	getUserProfile: async (): Promise<UserProfile> => {
+		const response = await apiClient.get("/auth/profile/");
+		return response.data;
+	},
+
+	verifyRegister: async (data: { email: string; otp: string }) => {
+		return apiClient.post("/auth/verify-register/", data);
 	},
 
 	logout: async () => {
@@ -70,18 +86,16 @@ export const authService = {
 
 	// Google login
 	googleLogin: async (idToken: string): Promise<GoogleLoginResponse> => {
-		const endpoint = "/api/auth/login";
+		const endpoint = "/auth/google/";
 		try {
-			const response = await axios.post(endpoint, { token: idToken });
+			const response = await apiClient.post(endpoint, { token: idToken });
 			const responseData = response.data as GoogleLoginResponse;
 
 			// Save the token to localStorage
-			localStorage.setItem("token", responseData.token);
-
-			// Set authorization header for future requests
-			if (responseData && responseData.token) {
+			if (responseData && responseData.tokens && responseData.tokens.access) {
+				localStorage.setItem("token", responseData.tokens.access);
 				axios.defaults.headers.common["Authorization"] =
-					`Bearer ${responseData.token}`;
+					`Bearer ${responseData.tokens.access}`;
 			}
 			return responseData;
 		} catch (error: any) {

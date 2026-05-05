@@ -23,10 +23,12 @@ INSTALLED_APPS = [
 
     'channels',
     'rest_framework',
+    'django_celery_beat',
     'accounts',
     'onboard',
     'interview',
     'career',
+    'whatsapp',
     'corsheaders',
 ]
 MIDDLEWARE = [
@@ -44,11 +46,29 @@ ROOT_URLCONF = 'core.urls'
 WSGI_APPLICATION = 'core.wsgi.application'
 ASGI_APPLICATION = 'core.asgi.application'
 
-# Django Channels
+# Django Channels — Redis backend for multi-worker support
+REDIS_URL = os.getenv('REDIS_URL', 'redis://localhost:6379/1')
 CHANNEL_LAYERS = {
     'default': {
-        'BACKEND': 'channels.layers.InMemoryChannelLayer',
+        'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        'CONFIG': {'hosts': [REDIS_URL]},
     },
+}
+
+# Celery
+CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL', 'redis://localhost:6379/0')
+CELERY_RESULT_BACKEND = os.getenv('CELERY_BROKER_URL', 'redis://localhost:6379/0')
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = 'UTC'
+
+# Cache (Redis)
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+        'LOCATION': os.getenv('REDIS_URL', 'redis://localhost:6379/1'),
+    }
 }
 
 TEMPLATES = [
@@ -107,3 +127,9 @@ EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER')
 EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
 DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
 
+# WhatsApp Business API
+WHATSAPP_ACCESS_TOKEN    = os.getenv('WHATSAPP_ACCESS_TOKEN', '')
+WHATSAPP_PHONE_NUMBER_ID = os.getenv('WHATSAPP_PHONE_NUMBER_ID', '')
+WHATSAPP_APP_SECRET      = os.getenv('WHATSAPP_APP_SECRET', '')
+WHATSAPP_VERIFY_TOKEN    = os.getenv('WHATSAPP_VERIFY_TOKEN', 'beaver-verify-token')
+BEAVER_BASE_URL          = os.getenv('BEAVER_BASE_URL', 'https://beaver.ai')
